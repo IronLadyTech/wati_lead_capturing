@@ -1,0 +1,21 @@
+# Iron Lady WATI Analytics - Dependencies
+
+# FastAPI Backend
+fastapi==0.104.1
+uvicorn==0.24.0
+python-multipart==0.0.6
+
+# Database
+sqlalchemy==2.0.23
+psycopg2-binary==2.9.9
+
+# Streamlit Dashboard
+streamlit==1.29.0
+pandas==2.1.3
+requests==2.31.0
+
+# Timezone
+pytz==2023.3
+
+# Environment Variables
+python-dotenv==1.0.0

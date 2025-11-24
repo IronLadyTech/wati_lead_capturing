@@ -1,0 +1,1161 @@
+/* ============================================
+   Iron Lady React Dashboard - Styles
+   ============================================ */
+
+/* Reset & Base */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%);
+  min-height: 100vh;
+}
+
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ============================================
+   Header
+   ============================================ */
+.header {
+  background: linear-gradient(135deg, #8B0000 0%, #c41e3a 100%);
+  color: white;
+  padding: 1.5rem 2rem;
+  box-shadow: 0 4px 20px rgba(139, 0, 0, 0.3);
+}
+
+.header-content {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  justify-content: center;
+}
+
+.header h1 {
+  font-size: 2rem;
+  font-weight: 700;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.header-subtitle {
+  text-align: center;
+  font-size: 0.9rem;
+  opacity: 0.9;
+  margin-top: 0.5rem;
+  letter-spacing: 2px;
+}
+
+.logo {
+  height: 60px;
+  width: auto;
+}
+
+/* ============================================
+   Filters Section
+   ============================================ */
+.filters-section {
+  background: white;
+  padding: 1.5rem 2rem;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+}
+
+.filters-row {
+  display: flex;
+  gap: 1.5rem;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.filter-group label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #555;
+}
+
+.filter-group select,
+.filter-group input {
+  padding: 0.75rem 1rem;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  min-width: 180px;
+  transition: all 0.3s ease;
+}
+
+.filter-group select:focus,
+.filter-group input:focus {
+  outline: none;
+  border-color: #8B0000;
+  box-shadow: 0 0 0 3px rgba(139, 0, 0, 0.1);
+}
+
+.search-group {
+  flex: 1;
+  min-width: 250px;
+}
+
+.search-group input {
+  width: 100%;
+}
+
+/* ============================================
+   Action Buttons Section
+   ============================================ */
+.action-buttons-section {
+  display: flex;
+  gap: 12px;
+  padding: 1rem 2rem;
+  background: linear-gradient(135deg, #fafafa 0%, #f0f0f0 100%);
+  border-bottom: 1px solid #e0e0e0;
+  flex-wrap: wrap;
+}
+
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0.75rem 1.25rem;
+  background: white;
+  border: 2px solid #e0e0e0;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #555;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.action-btn:hover {
+  border-color: #8B0000;
+  color: #8B0000;
+  background: linear-gradient(135deg, #fff5f5 0%, #ffe0e0 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(139, 0, 0, 0.15);
+}
+
+.action-btn.active {
+  background: linear-gradient(135deg, #8B0000 0%, #c41e3a 100%);
+  color: white;
+  border-color: #8B0000;
+  box-shadow: 0 4px 15px rgba(139, 0, 0, 0.3);
+}
+
+.action-btn-back {
+  background: linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 100%);
+  border-color: #ccc;
+}
+
+.action-btn-back:hover {
+  background: linear-gradient(135deg, #8B0000 0%, #c41e3a 100%);
+  color: white;
+  border-color: #8B0000;
+}
+
+.action-icon {
+  font-size: 1rem;
+}
+
+/* ============================================
+   Stats Cards
+   ============================================ */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.5rem;
+  padding: 2rem;
+}
+
+.stat-card {
+  background: white;
+  border-radius: 16px;
+  padding: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12);
+}
+
+.stat-icon {
+  font-size: 2.5rem;
+  width: 60px;
+  height: 60px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stat-total .stat-icon { background: linear-gradient(135deg, #667eea, #764ba2); }
+.stat-new .stat-icon { background: linear-gradient(135deg, #11998e, #38ef7d); }
+.stat-enrolled .stat-icon { background: linear-gradient(135deg, #ee0979, #ff6a00); }
+.stat-counsellor .stat-icon { background: linear-gradient(135deg, #4facfe, #00f2fe); }
+
+.stat-number {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #333;
+}
+
+.stat-label {
+  font-size: 0.9rem;
+  color: #777;
+}
+
+/* ============================================
+   Buttons
+   ============================================ */
+.btn {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  text-decoration: none;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #8B0000, #c41e3a);
+  color: white;
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(139, 0, 0, 0.3);
+}
+
+.btn-refresh {
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: white;
+}
+
+.btn-refresh:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+}
+
+.btn-download {
+  background: linear-gradient(135deg, #11998e, #38ef7d);
+  color: white;
+}
+
+.btn-download:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(17, 153, 142, 0.3);
+}
+
+.btn-call {
+  background: linear-gradient(135deg, #4facfe, #00f2fe);
+  color: white;
+}
+
+.btn-whatsapp {
+  background: linear-gradient(135deg, #25D366, #128C7E);
+  color: white;
+}
+
+.btn-resolve {
+  background: linear-gradient(135deg, #11998e, #38ef7d);
+  color: white;
+}
+
+.btn-resolve:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(17, 153, 142, 0.3);
+}
+
+.btn-pending {
+  background: linear-gradient(135deg, #f7971e, #ffd200);
+  color: white;
+}
+
+.btn-pending:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(247, 151, 30, 0.3);
+}
+
+/* ============================================
+   Main Content
+   ============================================ */
+.main-content {
+  flex: 1;
+  padding: 0 2rem 2rem;
+}
+
+.table-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding: 1rem 0;
+}
+
+.lead-count {
+  font-size: 1.1rem;
+  color: #555;
+}
+
+/* ============================================
+   Table
+   ============================================ */
+.table-container {
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+
+.leads-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.leads-table thead {
+  background: linear-gradient(135deg, #8B0000, #c41e3a);
+  color: white;
+}
+
+.leads-table th {
+  padding: 1rem;
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.leads-table tbody tr {
+  border-bottom: 1px solid #f0f0f0;
+  transition: background 0.2s ease;
+}
+
+.leads-table tbody tr:hover {
+  background: #f8f9fa;
+}
+
+.leads-table td {
+  padding: 1rem;
+  font-size: 0.95rem;
+  color: #444;
+}
+
+.name-link {
+  background: none;
+  border: none;
+  color: #8B0000;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.5rem 0;
+  font-size: 0.95rem;
+  transition: color 0.2s;
+}
+
+.name-link:hover {
+  color: #c41e3a;
+  text-decoration: underline;
+}
+
+.phone-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.icon-btn {
+  text-decoration: none;
+  font-size: 1.1rem;
+}
+
+.whatsapp-btn {
+  background: #25D366;
+  color: white;
+  padding: 0.3rem 0.6rem;
+  border-radius: 6px;
+  text-decoration: none;
+  font-size: 0.9rem;
+  transition: background 0.2s;
+}
+
+.whatsapp-btn:hover {
+  background: #128C7E;
+}
+
+/* ============================================
+   Badges
+   ============================================ */
+.badge {
+  padding: 0.4rem 0.8rem;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.badge-success {
+  background: #d4edda;
+  color: #155724;
+}
+
+.badge-info {
+  background: #d1ecf1;
+  color: #0c5460;
+}
+
+.badge-default {
+  background: #e9ecef;
+  color: #495057;
+}
+
+/* ============================================
+   Status Badges (for Modal)
+   ============================================ */
+.status-badge {
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  display: inline-block;
+}
+
+.status-resolved {
+  background: linear-gradient(135deg, #d4edda, #c3e6cb);
+  color: #155724;
+  border: 2px solid #28a745;
+}
+
+.status-pending {
+  background: linear-gradient(135deg, #fff3cd, #ffeeba);
+  color: #856404;
+  border: 2px solid #ffc107;
+}
+
+/* ============================================
+   Query Button - With Status Colors
+   ============================================ */
+.query-btn {
+  border: none;
+  padding: 0.6rem 0.9rem;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 1.1rem;
+  transition: all 0.3s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Pending status - Orange/Yellow gradient */
+.query-btn.query-pending {
+  background: linear-gradient(135deg, #f7971e, #ffd200);
+  color: white;
+  box-shadow: 0 3px 10px rgba(247, 151, 30, 0.4);
+}
+
+.query-btn.query-pending:hover {
+  transform: scale(1.1);
+  box-shadow: 0 5px 20px rgba(247, 151, 30, 0.5);
+}
+
+/* Resolved status - Green gradient */
+.query-btn.query-resolved {
+  background: linear-gradient(135deg, #11998e, #38ef7d);
+  color: white;
+  box-shadow: 0 3px 10px rgba(17, 153, 142, 0.4);
+}
+
+.query-btn.query-resolved:hover {
+  transform: scale(1.1);
+  box-shadow: 0 5px 20px rgba(17, 153, 142, 0.5);
+}
+
+.dot {
+  color: #ccc;
+  font-size: 1.5rem;
+}
+
+/* ============================================
+   Course Tags
+   ============================================ */
+.course-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.course-tag {
+  background: linear-gradient(135deg, #f093fb, #f5576c);
+  color: white;
+  padding: 0.3rem 0.6rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+/* ============================================
+   View Container (Shared for Feedbacks, Courses, etc.)
+   ============================================ */
+.view-container {
+  background: white;
+  border-radius: 16px;
+  margin-top: 1.5rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  animation: fadeInUp 0.4s ease;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.view-header {
+  padding: 1.5rem 2rem;
+  border-bottom: 3px solid;
+  border-image: linear-gradient(135deg, #8B0000, #c41e3a) 1;
+}
+
+.view-header h2 {
+  font-size: 1.5rem;
+  color: #8B0000;
+  font-weight: 700;
+}
+
+/* ============================================
+   Tabs
+   ============================================ */
+.tabs-container {
+  display: flex;
+  gap: 0;
+  background: linear-gradient(135deg, #f8f8f8 0%, #f0f0f0 100%);
+  border-bottom: 1px solid #e0e0e0;
+  padding: 0 1.5rem;
+}
+
+.tab-btn {
+  padding: 1rem 1.5rem;
+  background: transparent;
+  border: none;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #666;
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.tab-btn:hover {
+  color: #8B0000;
+  background: rgba(139, 0, 0, 0.05);
+}
+
+.tab-btn.active {
+  color: #8B0000;
+  border-bottom-color: #8B0000;
+  background: white;
+}
+
+/* ============================================
+   Course Interests View
+   ============================================ */
+.course-overview {
+  padding: 2rem;
+}
+
+.course-overview-content {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  align-items: start;
+}
+
+.course-table-container {
+  background: linear-gradient(135deg, #fafafa 0%, #f5f5f5 100%);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+}
+
+.course-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.course-table th {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 1rem 1.25rem;
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.course-table td {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid #eee;
+}
+
+.course-table tr:last-child td {
+  border-bottom: none;
+}
+
+.course-table tbody tr:hover {
+  background: #f0f0f0;
+}
+
+.course-name-cell {
+  font-weight: 700;
+  color: #8B0000;
+}
+
+.number-cell {
+  text-align: right;
+  font-weight: 600;
+  color: #333;
+}
+
+.course-chart-container {
+  background: linear-gradient(135deg, #fafafa 0%, #f5f5f5 100%);
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+}
+
+/* Course Users View */
+.course-users-view {
+  padding: 2rem;
+}
+
+.course-info-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.course-info-header h3 {
+  font-size: 1.25rem;
+  color: #333;
+  font-weight: 600;
+}
+
+.user-count {
+  background: linear-gradient(135deg, #8B0000 0%, #c41e3a 100%);
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  box-shadow: 0 2px 10px rgba(139, 0, 0, 0.3);
+}
+
+.course-users-table-container {
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid #e0e0e0;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+}
+
+/* ============================================
+   Feedbacks View
+   ============================================ */
+.feedback-count-bar {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 1.25rem 2rem;
+  color: white;
+}
+
+.feedback-count-bar span {
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.feedback-count-bar strong {
+  font-weight: 700;
+  font-size: 1.2rem;
+}
+
+.feedbacks-list {
+  padding: 1.5rem 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.feedback-card {
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 16px;
+  overflow: hidden;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+}
+
+.feedback-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12);
+  border-color: #8B0000;
+}
+
+.feedback-card-header {
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.feedback-user-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.feedback-user-name {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #333;
+}
+
+.feedback-date {
+  font-size: 0.85rem;
+  color: #888;
+  font-weight: 500;
+}
+
+.feedback-card-body {
+  padding: 1.25rem 1.5rem;
+}
+
+.feedback-contact-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  margin-bottom: 1.25rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px dashed #e0e0e0;
+}
+
+.feedback-contact-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.contact-link {
+  text-decoration: none;
+  font-size: 0.95rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.contact-link:hover {
+  transform: translateX(3px);
+}
+
+.phone-link {
+  color: #2E7D32;
+}
+
+.phone-link:hover {
+  color: #1B5E20;
+}
+
+.email-link {
+  color: #1565C0;
+}
+
+.email-link:hover {
+  color: #0D47A1;
+}
+
+.whatsapp-badge {
+  background: linear-gradient(135deg, #25D366, #128C7E);
+  color: white;
+  padding: 0.35rem 0.75rem;
+  border-radius: 15px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-decoration: none;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  transition: all 0.2s ease;
+}
+
+.whatsapp-badge:hover {
+  transform: scale(1.05);
+  box-shadow: 0 3px 10px rgba(37, 211, 102, 0.4);
+}
+
+.feedback-text-container {
+  background: linear-gradient(135deg, #f8f9fa 0%, #f0f0f0 100%);
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+  border-left: 4px solid #8B0000;
+}
+
+.feedback-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #8B0000;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  display: block;
+  margin-bottom: 0.5rem;
+}
+
+.feedback-text {
+  font-size: 0.95rem;
+  color: #444;
+  line-height: 1.7;
+}
+
+.no-data-card {
+  text-align: center;
+  padding: 4rem 2rem;
+  color: #888;
+}
+
+.no-data-card p {
+  font-size: 1.1rem;
+}
+
+/* ============================================
+   Coming Soon
+   ============================================ */
+.coming-soon {
+  text-align: center;
+  padding: 5rem 2rem;
+  color: #888;
+}
+
+.coming-soon p {
+  font-size: 1.2rem;
+}
+
+/* ============================================
+   Modal Overlay & Container
+   ============================================ */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.modal-container {
+  background: white;
+  border-radius: 20px;
+  width: 90%;
+  max-width: 500px;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: slideUp 0.3s ease;
+}
+
+.modal-large {
+  max-width: 700px;
+}
+
+@keyframes slideUp {
+  from { 
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to { 
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.modal-header {
+  background: linear-gradient(135deg, #8B0000, #c41e3a);
+  color: white;
+  padding: 1.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-radius: 20px 20px 0 0;
+}
+
+.modal-header h2 {
+  font-size: 1.3rem;
+  font-weight: 600;
+}
+
+.modal-close {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  font-size: 1.2rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.modal-close:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.modal-body {
+  padding: 1.5rem;
+}
+
+.modal-field {
+  margin-bottom: 1rem;
+}
+
+.modal-label {
+  font-weight: 600;
+  color: #8B0000;
+  font-size: 0.9rem;
+}
+
+.modal-value {
+  color: #333;
+  margin-left: 0.5rem;
+}
+
+.modal-message {
+  background: #f8f9fa;
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  padding: 1rem;
+  margin-top: 0.5rem;
+  white-space: pre-wrap;
+  line-height: 1.6;
+  color: #444;
+}
+
+.modal-footer {
+  padding: 1rem 1.5rem 1.5rem;
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* ============================================
+   User Details Grid
+   ============================================ */
+.user-details-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1.5rem;
+}
+
+.detail-card {
+  background: #f8f9fa;
+  border-radius: 12px;
+  padding: 1.5rem;
+}
+
+.detail-card h3 {
+  color: #8B0000;
+  margin-bottom: 1rem;
+  font-size: 1.1rem;
+}
+
+.detail-row {
+  display: flex;
+  margin-bottom: 0.75rem;
+}
+
+.detail-label {
+  font-weight: 600;
+  color: #555;
+  min-width: 120px;
+}
+
+.detail-value {
+  color: #333;
+}
+
+/* ============================================
+   Loading & Error States
+   ============================================ */
+.loading-container,
+.error-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem;
+  color: #666;
+}
+
+.spinner {
+  width: 50px;
+  height: 50px;
+  border: 4px solid #f0f0f0;
+  border-top-color: #8B0000;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 1rem;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading {
+  text-align: center;
+  padding: 3rem;
+  color: #666;
+  font-size: 1rem;
+}
+
+.no-data {
+  text-align: center;
+  padding: 3rem;
+  color: #999;
+}
+
+/* ============================================
+   Footer
+   ============================================ */
+.footer {
+  background: #333;
+  color: #aaa;
+  text-align: center;
+  padding: 1rem;
+  font-size: 0.85rem;
+}
+
+/* ============================================
+   Responsive Design
+   ============================================ */
+@media (max-width: 1024px) {
+  .leads-table {
+    font-size: 0.85rem;
+  }
+  
+  .leads-table th,
+  .leads-table td {
+    padding: 0.75rem 0.5rem;
+  }
+
+  .course-overview-content {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .header h1 {
+    font-size: 1.5rem;
+  }
+  
+  .filters-row {
+    flex-direction: column;
+  }
+  
+  .filter-group {
+    width: 100%;
+  }
+  
+  .filter-group select,
+  .filter-group input {
+    width: 100%;
+  }
+
+  .action-buttons-section {
+    flex-direction: column;
+    padding: 1rem;
+  }
+
+  .action-btn {
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    padding: 1rem;
+  }
+  
+  .table-container {
+    overflow-x: auto;
+  }
+  
+  .leads-table {
+    min-width: 900px;
+  }
+
+  .feedback-contact-row {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .feedback-user-info {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+  }
+
+  .view-header {
+    padding: 1rem 1.5rem;
+  }
+
+  .view-header h2 {
+    font-size: 1.25rem;
+  }
+
+  .feedbacks-list {
+    padding: 1rem;
+  }
+
+  .course-overview {
+    padding: 1rem;
+  }
+
+  .course-users-view {
+    padding: 1rem;
+  }
+}
