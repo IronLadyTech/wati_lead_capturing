@@ -1139,7 +1139,7 @@ function App() {
       <header className="header">
         <div className="header-content">
           <img src="/logo.png" alt="Iron Lady" className="logo" onError={(e) => e.target.style.display = 'none'} />
-          <h1>Iron Lady - Leads Dashboard</h1>
+          <h1>Iron Lady - Wati Leads Dashboard</h1>
         </div>
         <div className="header-subtitle">ELEVATING A MILLION WOMEN TO THE TOP</div>
       </header>
