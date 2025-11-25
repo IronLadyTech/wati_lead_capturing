@@ -652,6 +652,156 @@ body {
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
 }
 
+.chart-title {
+  font-size: 1rem;
+  color: #555;
+  margin-bottom: 1.5rem;
+  text-align: center;
+  font-weight: 600;
+}
+
+/* Simple Bar Chart Styles */
+.simple-chart {
+  width: 100%;
+  height: 250px;
+  display: flex;
+  flex-direction: column;
+}
+
+.chart-bars {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-around;
+  gap: 1rem;
+  padding: 0 1rem;
+}
+
+.chart-bar-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  max-width: 80px;
+}
+
+.chart-bar-wrapper {
+  width: 100%;
+  height: 180px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.chart-bar {
+  width: 100%;
+  max-width: 50px;
+  background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
+  border-radius: 8px 8px 0 0;
+  position: relative;
+  transition: all 0.3s ease;
+  min-height: 20px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.chart-bar:hover {
+  transform: scaleX(1.1);
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+}
+
+.chart-bar-value {
+  position: absolute;
+  top: -25px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #333;
+}
+
+.chart-bar-label {
+  margin-top: 0.75rem;
+  font-size: 0.8rem;
+  color: #666;
+  font-weight: 600;
+  text-align: center;
+}
+
+.chart-title {
+  font-size: 1rem;
+  color: #555;
+  margin-bottom: 1.5rem;
+  text-align: center;
+  font-weight: 600;
+}
+
+/* Simple Bar Chart Styles */
+.simple-chart {
+  width: 100%;
+  height: 250px;
+  display: flex;
+  flex-direction: column;
+}
+
+.chart-bars {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-around;
+  gap: 1rem;
+  padding: 0 1rem;
+}
+
+.chart-bar-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  max-width: 80px;
+}
+
+.chart-bar-wrapper {
+  width: 100%;
+  height: 180px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.chart-bar {
+  width: 100%;
+  max-width: 50px;
+  background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
+  border-radius: 8px 8px 0 0;
+  position: relative;
+  transition: all 0.3s ease;
+  min-height: 20px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.chart-bar:hover {
+  transform: scaleX(1.1);
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+}
+
+.chart-bar-value {
+  position: absolute;
+  top: -25px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #333;
+}
+
+.chart-bar-label {
+  margin-top: 0.75rem;
+  font-size: 0.8rem;
+  color: #666;
+  font-weight: 600;
+  text-align: center;
+}
+
 /* Course Users View */
 .course-users-view {
   padding: 2rem;

@@ -1,9 +1,35 @@
 import React, { useState, useEffect } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import './App.css';
 
 // API Base URL
 const API_URL = 'http://localhost:8000';
+
+// ============================================
+// SIMPLE BAR CHART COMPONENT (No external library)
+// ============================================
+const SimpleBarChart = ({ data }) => {
+  const maxValue = Math.max(...data.map(d => d.clicks), 1);
+  
+  return (
+    <div className="simple-chart">
+      <div className="chart-bars">
+        {data.map((item, idx) => (
+          <div key={idx} className="chart-bar-container">
+            <div className="chart-bar-wrapper">
+              <div 
+                className="chart-bar" 
+                style={{ height: `${(item.clicks / maxValue) * 100}%` }}
+              >
+                <span className="chart-bar-value">{item.clicks}</span>
+              </div>
+            </div>
+            <span className="chart-bar-label">{item.name}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
 
 // ============================================
 // FLOATING MODAL COMPONENT
@@ -345,23 +371,10 @@ const CourseInterestsView = () => {
               </table>
             </div>
 
-            {/* Chart */}
+            {/* Simple CSS Chart */}
             <div className="course-chart-container">
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis 
-                    dataKey="name" 
-                    angle={-45} 
-                    textAnchor="end" 
-                    height={80}
-                    interval={0}
-                  />
-                  <YAxis />
-                  <Tooltip />
-                  <Bar dataKey="clicks" fill="#2196F3" name="Total Clicks" />
-                </BarChart>
-              </ResponsiveContainer>
+              <h4 className="chart-title">Total Clicks by Course</h4>
+              <SimpleBarChart data={chartData} />
             </div>
           </div>
         </div>
