@@ -546,13 +546,231 @@ const FeedbacksView = () => {
 // BROADCAST STATUS VIEW COMPONENT
 // ============================================
 const BroadcastStatusView = () => {
+  const [stats, setStats] = useState(null);
+  const [failedMessages, setFailedMessages] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState('all'); // 'all', 'pending', 'manually_sent'
+  const [searchTerm, setSearchTerm] = useState('');
+
+  useEffect(() => {
+    fetchBroadcastData();
+  }, []);
+
+  const fetchBroadcastData = async () => {
+    setLoading(true);
+    try {
+      const [statsRes, failedRes] = await Promise.all([
+        fetch(`${API_URL}/api/broadcasts/stats`),
+        fetch(`${API_URL}/api/broadcasts/failed`)
+      ]);
+      
+      const statsData = await statsRes.json();
+      const failedData = await failedRes.json();
+      
+      setStats(statsData);
+      setFailedMessages(failedData.failed_broadcasts || []);
+      setLoading(false);
+    } catch (err) {
+      console.error(err);
+      setLoading(false);
+    }
+  };
+
+  const handleSendViaWhatsApp = (phone, message) => {
+    // Clean phone number
+    const cleanPhone = phone.replace(/[^0-9]/g, '');
+    // Encode message for URL
+    const encodedMessage = encodeURIComponent(message);
+    // Open WhatsApp Web/App with pre-filled message
+    const url = `https://wa.me/${cleanPhone}?text=${encodedMessage}`;
+    window.open(url, '_blank');
+  };
+
+  const handleCopyMessage = (message) => {
+    navigator.clipboard.writeText(message);
+    alert('Message copied to clipboard!');
+  };
+
+  const handleMarkAsSent = async (broadcastId) => {
+    try {
+      await fetch(`${API_URL}/api/broadcasts/${broadcastId}/mark-resent`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manually_sent_by: 'Dashboard User' })
+      });
+      
+      // Refresh data
+      fetchBroadcastData();
+      alert('Marked as manually sent!');
+    } catch (err) {
+      console.error(err);
+      alert('Failed to update status');
+    }
+  };
+
+  const filteredMessages = failedMessages.filter(msg => {
+    // Search filter
+    if (searchTerm) {
+      const search = searchTerm.toLowerCase();
+      const name = (msg.recipient_name || '').toLowerCase();
+      const phone = (msg.phone_number || '').toLowerCase();
+      const message = (msg.message_text || '').toLowerCase();
+      
+      if (!name.includes(search) && !phone.includes(search) && !message.includes(search)) {
+        return false;
+      }
+    }
+    
+    return true;
+  });
+
+  if (loading) {
+    return (
+      <div className="view-container">
+        <div className="loading-container">
+          <div className="spinner"></div>
+          <p>Loading broadcast data...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="view-container">
       <div className="view-header">
         <h2>📢 Broadcast Status</h2>
       </div>
-      <div className="coming-soon">
-        <p>Broadcast tracking feature coming soon...</p>
+
+      {/* Broadcast Stats */}
+      {stats && (
+        <div className="broadcast-stats">
+          <div className="broadcast-stat-card stat-total">
+            <div className="broadcast-stat-icon">📊</div>
+            <div className="broadcast-stat-content">
+              <div className="broadcast-stat-number">{stats.total}</div>
+              <div className="broadcast-stat-label">Total Sent</div>
+            </div>
+          </div>
+          <div className="broadcast-stat-card stat-delivered">
+            <div className="broadcast-stat-icon">✅</div>
+            <div className="broadcast-stat-content">
+              <div className="broadcast-stat-number">{stats.delivered}</div>
+              <div className="broadcast-stat-label">Delivered</div>
+            </div>
+          </div>
+          <div className="broadcast-stat-card stat-failed">
+            <div className="broadcast-stat-icon">❌</div>
+            <div className="broadcast-stat-content">
+              <div className="broadcast-stat-number">{stats.failed}</div>
+              <div className="broadcast-stat-label">Failed</div>
+            </div>
+          </div>
+          <div className="broadcast-stat-card stat-manual">
+            <div className="broadcast-stat-icon">📱</div>
+            <div className="broadcast-stat-content">
+              <div className="broadcast-stat-number">{stats.manually_sent}</div>
+              <div className="broadcast-stat-label">Manually Sent</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Search Bar */}
+      <div className="broadcast-filters">
+        <div className="broadcast-search-group">
+          <label>🔍 Search Failed Messages</label>
+          <input
+            type="text"
+            placeholder="Search name, phone, or message..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+        <button className="btn btn-refresh" onClick={fetchBroadcastData}>
+          🔄 Refresh
+        </button>
+      </div>
+
+      {/* Failed Messages Header */}
+      <div className="failed-messages-header">
+        <h3>❌ Failed Messages ({filteredMessages.length})</h3>
+        {filteredMessages.length > 0 && (
+          <div className="bulk-actions">
+            <button 
+              className="btn btn-primary"
+              onClick={() => {
+                const allMessages = filteredMessages.map(msg => 
+                  `${msg.phone_number} - ${msg.recipient_name || 'Unknown'}:\n${msg.message_text}`
+                ).join('\n\n---\n\n');
+                navigator.clipboard.writeText(allMessages);
+                alert('All messages copied to clipboard!');
+              }}
+            >
+              📋 Copy All Messages
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Failed Messages List */}
+      <div className="failed-messages-list">
+        {filteredMessages.length === 0 ? (
+          <div className="no-failed-messages">
+            <p>🎉 No failed messages! All broadcasts delivered successfully.</p>
+          </div>
+        ) : (
+          filteredMessages.map((msg, idx) => (
+            <div key={idx} className="failed-message-card">
+              <div className="failed-message-header">
+                <div className="failed-message-user">
+                  <span className="failed-message-name">{msg.recipient_name || 'Unknown'}</span>
+                  <span className="failed-message-phone">📱 {msg.phone_number}</span>
+                </div>
+                <div className="failed-message-meta">
+                  <span className="failed-message-date">📅 {formatDate(msg.failed_at || msg.sent_at)}</span>
+                </div>
+              </div>
+
+              <div className="failed-message-body">
+                <div className="failed-message-text">
+                  <span className="failed-message-label">Message:</span>
+                  <p>{msg.message_text}</p>
+                </div>
+
+                {msg.failure_reason && (
+                  <div className="failed-message-reason">
+                    <span className="failed-message-label">⚠️ Failure Reason:</span>
+                    <p>{msg.failure_reason}</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="failed-message-actions">
+                <button 
+                  className="btn btn-whatsapp"
+                  onClick={() => handleSendViaWhatsApp(msg.phone_number, msg.message_text)}
+                  title="Open WhatsApp with pre-filled message"
+                >
+                  💬 Send via WhatsApp
+                </button>
+                <button 
+                  className="btn btn-secondary"
+                  onClick={() => handleCopyMessage(msg.message_text)}
+                  title="Copy message to clipboard"
+                >
+                  📋 Copy Message
+                </button>
+                <button 
+                  className="btn btn-resolve"
+                  onClick={() => handleMarkAsSent(msg.id)}
+                  title="Mark this message as manually sent"
+                >
+                  ✅ Mark as Sent
+                </button>
+              </div>
+            </div>
+          ))
+        )}
       </div>
     </div>
   );
