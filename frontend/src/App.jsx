@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import './App.css';
 
 // API Base URL
-const API_URL = 'http://localhost:8000';
+const API_URL = "https://wati-leads-dashboard.iamironlady.com";
 
 // ============================================
 // SIMPLE BAR CHART COMPONENT (No external library)
