@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import './App.css';
 
 // API Base URL
 const API_URL = "https://wati-leads-dashboard.iamironlady.com";
 
 // ============================================
-// SIMPLE BAR CHART COMPONENT (No external library)
+// SIMPLE BAR CHART COMPONENT
 // ============================================
 const SimpleBarChart = ({ data }) => {
   const maxValue = Math.max(...data.map(d => d.clicks), 1);
@@ -32,57 +32,310 @@ const SimpleBarChart = ({ data }) => {
 };
 
 // ============================================
-// FLOATING MODAL COMPONENT
+// HELPER FUNCTIONS
 // ============================================
-const QueryModal = ({ isOpen, onClose, data, onStatusChange }) => {
-  if (!isOpen || !data) return null;
+const formatDate = (dateString) => {
+  if (!dateString) return '-';
+  try {
+    const date = new Date(dateString);
+    return date.toLocaleString('en-IN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  } catch {
+    return '-';
+  }
+};
 
-  const handleStatusToggle = () => {
-    const newStatus = data.status === 'Resolved' ? 'Pending' : 'Resolved';
-    onStatusChange(data.phone, newStatus);
+const getStatusBadgeClass = (status) => {
+  switch (status) {
+    case 'pending': return 'status-pending';
+    case 'in_progress': return 'status-in-progress';
+    case 'resolved': return 'status-resolved';
+    default: return 'status-pending';
+  }
+};
+
+const getStatusIcon = (status) => {
+  switch (status) {
+    case 'pending': return '🟡';
+    case 'in_progress': return '🔵';
+    case 'resolved': return '✅';
+    default: return '⚪';
+  }
+};
+
+// ============================================
+// TICKET DETAIL MODAL WITH CONVERSATION
+// ============================================
+const TicketDetailModal = ({ isOpen, onClose, ticketId, onTicketUpdate }) => {
+  const [ticket, setTicket] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [replyText, setReplyText] = useState('');
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState(null);
+
+  const fetchTicketDetails = useCallback(async () => {
+    if (!ticketId) return;
+    
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_URL}/api/tickets/${ticketId}`);
+      const data = await res.json();
+      setTicket(data);
+      setLoading(false);
+    } catch (err) {
+      console.error(err);
+      setError('Failed to load ticket details');
+      setLoading(false);
+    }
+  }, [ticketId]);
+
+  useEffect(() => {
+    if (isOpen && ticketId) {
+      fetchTicketDetails();
+    }
+  }, [isOpen, ticketId, fetchTicketDetails]);
+
+  const handleSendReply = async () => {
+    if (!replyText.trim()) return;
+    
+    setSending(true);
+    setError(null);
+    
+    try {
+      const res = await fetch(`${API_URL}/api/tickets/${ticketId}/reply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: replyText,
+          counsellor_name: 'Counsellor'
+        })
+      });
+      
+      const data = await res.json();
+      
+      if (res.ok && data.success) {
+        setReplyText('');
+        fetchTicketDetails(); // Refresh conversation
+        if (onTicketUpdate) onTicketUpdate();
+      } else {
+        setError(data.detail || 'Failed to send reply');
+      }
+    } catch (err) {
+      console.error(err);
+      setError('Failed to send reply. Please try again.');
+    }
+    
+    setSending(false);
   };
+
+  const handleStatusChange = async (newStatus) => {
+    try {
+      const res = await fetch(`${API_URL}/api/tickets/${ticketId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: newStatus,
+          resolved_by: 'Counsellor'
+        })
+      });
+      
+      if (res.ok) {
+        fetchTicketDetails();
+        if (onTicketUpdate) onTicketUpdate();
+      }
+    } catch (err) {
+      console.error(err);
+      setError('Failed to update status');
+    }
+  };
+
+  if (!isOpen) return null;
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-container" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-container modal-ticket" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>💬 User Query</h2>
+          <h2>🎫 {ticket?.ticket?.ticket_number || 'Loading...'}</h2>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
-        <div className="modal-body">
-          <div className="modal-field">
-            <span className="modal-label">👤 Name:</span>
-            <span className="modal-value">{data.name || 'Unknown'}</span>
+        
+        {loading ? (
+          <div className="modal-body">
+            <div className="loading">Loading ticket details...</div>
           </div>
-          <div className="modal-field">
-            <span className="modal-label">📱 Phone:</span>
-            <span className="modal-value">{data.phone || '-'}</span>
+        ) : ticket ? (
+          <>
+            {/* Ticket Info Bar */}
+            <div className="ticket-info-bar">
+              <div className="ticket-info-item">
+                <span className="info-label">Category:</span>
+                <span className={`category-badge category-${ticket.ticket.category}`}>
+                  {ticket.ticket.category === 'query' ? '❓ Query' : '⚠️ Concern'}
+                </span>
+              </div>
+              <div className="ticket-info-item">
+                <span className="info-label">Status:</span>
+                <span className={`status-badge-large ${getStatusBadgeClass(ticket.ticket.status)}`}>
+                  {getStatusIcon(ticket.ticket.status)} {ticket.ticket.status.replace('_', ' ')}
+                </span>
+              </div>
+              <div className="ticket-info-item">
+                <span className="info-label">24hr Window:</span>
+                <span className={`window-badge ${ticket.ticket.is_24hr_active ? 'window-active' : 'window-expired'}`}>
+                  {ticket.ticket.is_24hr_active 
+                    ? `✅ Active (${ticket.ticket.hours_remaining}h left)` 
+                    : '❌ Expired'}
+                </span>
+              </div>
+            </div>
+
+            {/* User Info */}
+            <div className="ticket-user-info">
+              <div className="user-info-row">
+                <span className="user-icon">👤</span>
+                <span className="user-name">{ticket.user.name || 'Unknown'}</span>
+                <a href={`tel:${ticket.user.phone_number}`} className="contact-btn phone-btn">
+                  📞 {ticket.user.phone_number}
+                </a>
+                <a 
+                  href={`https://wa.me/${ticket.user.phone_number}`} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="contact-btn whatsapp-btn-small"
+                >
+                  💬 WhatsApp
+                </a>
+              </div>
+              {ticket.user.email && (
+                <div className="user-email">✉️ {ticket.user.email}</div>
+              )}
+              <div className="ticket-dates">
+                <span>Created: {formatDate(ticket.ticket.created_at)}</span>
+                {ticket.ticket.resolved_at && (
+                  <span> | Resolved: {formatDate(ticket.ticket.resolved_at)}</span>
+                )}
+              </div>
+            </div>
+
+            {/* Conversation Thread */}
+            <div className="conversation-container">
+              <h3 className="conversation-title">💬 Conversation</h3>
+              <div className="messages-list">
+                {ticket.messages.length === 0 ? (
+                  <div className="no-messages">No messages yet</div>
+                ) : (
+                  ticket.messages.map((msg, idx) => (
+                    <div 
+                      key={idx} 
+                      className={`message-bubble ${msg.direction === 'incoming' ? 'message-incoming' : 'message-outgoing'}`}
+                    >
+                      <div className="message-header">
+                        <span className="message-sender">
+                          {msg.direction === 'incoming' ? '👤 User' : `🎧 ${msg.sent_by || 'Counsellor'}`}
+                        </span>
+                        <span className="message-time">{formatDate(msg.created_at)}</span>
+                      </div>
+                      <div className="message-content">
+                        {msg.message_text}
+                      </div>
+                      {msg.media_url && (
+                        <div className="message-media">
+                          <a href={msg.media_url} target="_blank" rel="noopener noreferrer">
+                            📎 {msg.media_filename || 'View Attachment'}
+                          </a>
+                        </div>
+                      )}
+                      {msg.direction === 'outgoing' && (
+                        <div className="message-status">
+                          {msg.delivery_status === 'sent' && '✓ Sent'}
+                          {msg.delivery_status === 'delivered' && '✓✓ Delivered'}
+                          {msg.delivery_status === 'read' && '✓✓ Read'}
+                          {msg.delivery_status === 'failed' && '❌ Failed'}
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Reply Section */}
+            {ticket.ticket.status !== 'resolved' && (
+              <div className="reply-section">
+                {error && <div className="error-message">{error}</div>}
+                
+                {!ticket.ticket.is_24hr_active ? (
+                  <div className="window-expired-warning">
+                    ⚠️ 24-hour window has expired. You cannot send session messages.
+                    <br />
+                    Please contact the user via personal WhatsApp or wait for them to message again.
+                  </div>
+                ) : (
+                  <>
+                    <textarea
+                      className="reply-textarea"
+                      placeholder="Type your reply here..."
+                      value={replyText}
+                      onChange={(e) => setReplyText(e.target.value)}
+                      rows={3}
+                      disabled={sending}
+                    />
+                    <div className="reply-actions">
+                      <button 
+                        className="btn btn-primary"
+                        onClick={handleSendReply}
+                        disabled={sending || !replyText.trim()}
+                      >
+                        {sending ? '📤 Sending...' : '📤 Send Reply'}
+                      </button>
+                      <span className="reply-note">
+                        ℹ️ User will receive satisfaction buttons with your reply
+                      </span>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Footer Actions */}
+            <div className="modal-footer ticket-footer">
+              {ticket.ticket.status !== 'resolved' && (
+                <button 
+                  className="btn btn-resolve"
+                  onClick={() => handleStatusChange('resolved')}
+                >
+                  ✅ Mark as Resolved
+                </button>
+              )}
+              {ticket.ticket.status === 'resolved' && (
+                <button 
+                  className="btn btn-reopen"
+                  onClick={() => handleStatusChange('pending')}
+                >
+                  🔄 Reopen Ticket
+                </button>
+              )}
+              <a 
+                href={`https://wa.me/${ticket.user.phone_number}`} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="btn btn-whatsapp"
+              >
+                💬 Open WhatsApp
+              </a>
+            </div>
+          </>
+        ) : (
+          <div className="modal-body">
+            <div className="error">Failed to load ticket</div>
           </div>
-          <div className="modal-field">
-            <span className="modal-label">📅 Date:</span>
-            <span className="modal-value">{data.date || '-'}</span>
-          </div>
-          <div className="modal-field">
-            <span className="modal-label">📊 Status:</span>
-            <span className={`status-badge ${data.status === 'Resolved' ? 'status-resolved' : 'status-pending'}`}>
-              {data.status || 'Pending'}
-            </span>
-          </div>
-          <div className="modal-field">
-            <span className="modal-label">💬 Query:</span>
-            <div className="modal-message">{data.message || 'No query recorded'}</div>
-          </div>
-        </div>
-        <div className="modal-footer">
-          <button 
-            className={`btn ${data.status === 'Resolved' ? 'btn-pending' : 'btn-resolve'}`}
-            onClick={handleStatusToggle}
-          >
-            {data.status === 'Resolved' ? '🔄 Mark as Pending' : '✅ Mark as Resolved'}
-          </button>
-          <a href={`tel:${data.phone}`} className="btn btn-call">📞 Call</a>
-          <a href={`https://wa.me/${data.phone}`} target="_blank" rel="noopener noreferrer" className="btn btn-whatsapp">💬 WhatsApp</a>
-        </div>
+        )}
       </div>
     </div>
   );
@@ -159,8 +412,8 @@ const UserDetailModal = ({ isOpen, onClose, userId }) => {
                   <span className="detail-value">{formatDate(user.last_interaction)}</span>
                 </div>
                 <div className="detail-row">
-                  <span className="detail-label">Total Interactions:</span>
-                  <span className="detail-value">{user.interaction_count || 0}</span>
+                  <span className="detail-label">Active Ticket:</span>
+                  <span className="detail-value">{user.has_active_ticket ? 'Yes' : 'No'}</span>
                 </div>
               </div>
             </div>
@@ -180,13 +433,230 @@ const UserDetailModal = ({ isOpen, onClose, userId }) => {
 };
 
 // ============================================
+// TICKETS VIEW COMPONENT (QUERIES & CONCERNS)
+// ============================================
+const TicketsView = () => {
+  const [tickets, setTickets] = useState([]);
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('all'); // all, queries, concerns
+  const [statusFilter, setStatusFilter] = useState('all'); // all, pending, in_progress, resolved
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedTicketId, setSelectedTicketId] = useState(null);
+
+  const fetchTickets = useCallback(async () => {
+    setLoading(true);
+    try {
+      let url = `${API_URL}/api/tickets?limit=500`;
+      
+      if (statusFilter !== 'all') {
+        url += `&status=${statusFilter}`;
+      }
+      if (activeTab === 'queries') {
+        url += '&category=query';
+      } else if (activeTab === 'concerns') {
+        url += '&category=concern';
+      }
+      
+      const res = await fetch(url);
+      const data = await res.json();
+      setTickets(data.tickets || []);
+      setStats(data.stats || {});
+      setLoading(false);
+    } catch (err) {
+      console.error(err);
+      setLoading(false);
+    }
+  }, [activeTab, statusFilter]);
+
+  useEffect(() => {
+    fetchTickets();
+  }, [fetchTickets]);
+
+  // Filter tickets by search
+  const filteredTickets = tickets.filter(t => {
+    if (!searchTerm) return true;
+    const search = searchTerm.toLowerCase();
+    return (
+      (t.ticket_number || '').toLowerCase().includes(search) ||
+      (t.user_name || '').toLowerCase().includes(search) ||
+      (t.user_phone || '').toLowerCase().includes(search) ||
+      (t.initial_message || '').toLowerCase().includes(search)
+    );
+  });
+
+  return (
+    <div className="view-container">
+      <div className="view-header">
+        <h2>🎫 Support Tickets</h2>
+      </div>
+
+      {/* Stats Bar */}
+      {stats && (
+        <div className="ticket-stats-bar">
+          <div className="ticket-stat">
+            <span className="ticket-stat-number">{stats.total}</span>
+            <span className="ticket-stat-label">Total</span>
+          </div>
+          <div className="ticket-stat ticket-stat-pending">
+            <span className="ticket-stat-number">{stats.pending}</span>
+            <span className="ticket-stat-label">Pending</span>
+          </div>
+          <div className="ticket-stat ticket-stat-progress">
+            <span className="ticket-stat-number">{stats.in_progress}</span>
+            <span className="ticket-stat-label">In Progress</span>
+          </div>
+          <div className="ticket-stat ticket-stat-resolved">
+            <span className="ticket-stat-number">{stats.resolved}</span>
+            <span className="ticket-stat-label">Resolved</span>
+          </div>
+          <div className="ticket-stat ticket-stat-queries">
+            <span className="ticket-stat-number">{stats.queries}</span>
+            <span className="ticket-stat-label">Queries</span>
+          </div>
+          <div className="ticket-stat ticket-stat-concerns">
+            <span className="ticket-stat-number">{stats.concerns}</span>
+            <span className="ticket-stat-label">Concerns</span>
+          </div>
+        </div>
+      )}
+
+      {/* Tabs */}
+      <div className="tabs-container">
+        <button
+          className={`tab-btn ${activeTab === 'all' ? 'active' : ''}`}
+          onClick={() => setActiveTab('all')}
+        >
+          📋 All Tickets
+        </button>
+        <button
+          className={`tab-btn ${activeTab === 'queries' ? 'active' : ''}`}
+          onClick={() => setActiveTab('queries')}
+        >
+          ❓ Queries
+        </button>
+        <button
+          className={`tab-btn ${activeTab === 'concerns' ? 'active' : ''}`}
+          onClick={() => setActiveTab('concerns')}
+        >
+          ⚠️ Concerns
+        </button>
+      </div>
+
+      {/* Filters */}
+      <div className="ticket-filters">
+        <div className="filter-group">
+          <label>Status:</label>
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+            <option value="all">All Status</option>
+            <option value="pending">🟡 Pending</option>
+            <option value="in_progress">🔵 In Progress</option>
+            <option value="resolved">✅ Resolved</option>
+          </select>
+        </div>
+        <div className="filter-group search-group">
+          <label>Search:</label>
+          <input
+            type="text"
+            placeholder="Search ticket, name, phone..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+        <button className="btn btn-refresh" onClick={fetchTickets}>
+          🔄 Refresh
+        </button>
+      </div>
+
+      {/* Tickets List */}
+      {loading ? (
+        <div className="loading-container">
+          <div className="spinner"></div>
+          <p>Loading tickets...</p>
+        </div>
+      ) : (
+        <div className="tickets-list">
+          {filteredTickets.length === 0 ? (
+            <div className="no-data-card">
+              <p>No tickets found</p>
+            </div>
+          ) : (
+            filteredTickets.map(ticket => (
+              <div 
+                key={ticket.id} 
+                className={`ticket-card ticket-${ticket.status}`}
+                onClick={() => setSelectedTicketId(ticket.id)}
+              >
+                <div className="ticket-card-header">
+                  <div className="ticket-number-section">
+                    <span className="ticket-number">{ticket.ticket_number}</span>
+                    <span className={`category-badge category-${ticket.category}`}>
+                      {ticket.category === 'query' ? '❓ Query' : '⚠️ Concern'}
+                    </span>
+                  </div>
+                  <div className="ticket-status-section">
+                    <span className={`status-badge ${getStatusBadgeClass(ticket.status)}`}>
+                      {getStatusIcon(ticket.status)} {ticket.status.replace('_', ' ')}
+                    </span>
+                    {ticket.is_24hr_active ? (
+                      <span className="window-indicator window-active" title="24hr window active">
+                        ⏰ {ticket.hours_remaining}h
+                      </span>
+                    ) : (
+                      <span className="window-indicator window-expired" title="24hr window expired">
+                        ⏰ Expired
+                      </span>
+                    )}
+                  </div>
+                </div>
+                
+                <div className="ticket-card-body">
+                  <div className="ticket-user">
+                    <span className="user-name">👤 {ticket.user_name || 'Unknown'}</span>
+                    <span className="user-phone">📱 {ticket.user_phone}</span>
+                  </div>
+                  <div className="ticket-message">
+                    {ticket.initial_message.length > 150 
+                      ? ticket.initial_message.substring(0, 150) + '...' 
+                      : ticket.initial_message}
+                  </div>
+                </div>
+                
+                <div className="ticket-card-footer">
+                  <span className="ticket-date">📅 {formatDate(ticket.created_at)}</span>
+                  <span className="ticket-messages">💬 {ticket.message_count} messages</span>
+                  <button className="btn btn-view" onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedTicketId(ticket.id);
+                  }}>
+                    View & Reply →
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* Ticket Detail Modal */}
+      <TicketDetailModal
+        isOpen={selectedTicketId !== null}
+        onClose={() => setSelectedTicketId(null)}
+        ticketId={selectedTicketId}
+        onTicketUpdate={fetchTickets}
+      />
+    </div>
+  );
+};
+
+// ============================================
 // STATS CARDS COMPONENT
 // ============================================
 const StatsCards = ({ users }) => {
   const totalLeads = users.length;
   const newUsers = users.filter(u => u.participation_level === 'New to platform').length;
   const enrolled = users.filter(u => u.participation_level === 'Enrolled Participant').length;
-  const wantCounsellor = users.filter(u => u.has_call_request).length;
+  const withActiveTickets = users.filter(u => u.has_active_ticket).length;
 
   return (
     <div className="stats-grid">
@@ -212,10 +682,10 @@ const StatsCards = ({ users }) => {
         </div>
       </div>
       <div className="stat-card stat-counsellor">
-        <div className="stat-icon">📞</div>
+        <div className="stat-icon">🎫</div>
         <div className="stat-content">
-          <div className="stat-number">{wantCounsellor}</div>
-          <div className="stat-label">Want Counsellor</div>
+          <div className="stat-number">{withActiveTickets}</div>
+          <div className="stat-label">Active Tickets</div>
         </div>
       </div>
     </div>
@@ -229,25 +699,32 @@ const ActionButtons = ({ activeView, setActiveView }) => {
   return (
     <div className="action-buttons-section">
       <button 
+        className={`action-btn ${activeView === 'tickets' ? 'active' : ''}`}
+        onClick={() => setActiveView(activeView === 'tickets' ? 'leads' : 'tickets')}
+      >
+        <span className="action-icon">🎫</span>
+        <span>View Tickets</span>
+      </button>
+      <button 
         className={`action-btn ${activeView === 'feedbacks' ? 'active' : ''}`}
         onClick={() => setActiveView(activeView === 'feedbacks' ? 'leads' : 'feedbacks')}
       >
         <span className="action-icon">💬</span>
-        <span>View All Feedbacks</span>
+        <span>View Feedbacks</span>
       </button>
       <button 
         className={`action-btn ${activeView === 'courses' ? 'active' : ''}`}
         onClick={() => setActiveView(activeView === 'courses' ? 'leads' : 'courses')}
       >
         <span className="action-icon">📚</span>
-        <span>View Course Interests</span>
+        <span>Course Interests</span>
       </button>
       <button 
         className={`action-btn ${activeView === 'broadcast' ? 'active' : ''}`}
         onClick={() => setActiveView(activeView === 'broadcast' ? 'leads' : 'broadcast')}
       >
         <span className="action-icon">📢</span>
-        <span>View Broadcast Status</span>
+        <span>Broadcast Status</span>
       </button>
       {activeView !== 'leads' && (
         <button 
@@ -289,7 +766,7 @@ const CourseInterestsView = () => {
   };
 
   const fetchCourseUsers = async (courseName) => {
-    if (courseUsers[courseName]) return; // Already fetched
+    if (courseUsers[courseName]) return;
     try {
       const res = await fetch(`${API_URL}/api/course-interests/${courseName}`);
       const data = await res.json();
@@ -308,7 +785,6 @@ const CourseInterestsView = () => {
 
   const tabs = ['overview', 'LEP', '100BM', 'MBW', 'Masterclass'];
 
-  // Prepare chart data
   const chartData = courseData.map(c => ({
     name: c.course_name,
     clicks: c.total_clicks,
@@ -332,7 +808,6 @@ const CourseInterestsView = () => {
         <h2>📚 Course Interests</h2>
       </div>
 
-      {/* Tabs */}
       <div className="tabs-container">
         {tabs.map(tab => (
           <button
@@ -345,11 +820,9 @@ const CourseInterestsView = () => {
         ))}
       </div>
 
-      {/* Tab Content */}
       {activeTab === 'overview' ? (
         <div className="course-overview">
           <div className="course-overview-content">
-            {/* Table */}
             <div className="course-table-container">
               <table className="course-table">
                 <thead>
@@ -371,7 +844,6 @@ const CourseInterestsView = () => {
               </table>
             </div>
 
-            {/* Simple CSS Chart */}
             <div className="course-chart-container">
               <h4 className="chart-title">Total Clicks by Course</h4>
               <SimpleBarChart data={chartData} />
@@ -549,7 +1021,6 @@ const BroadcastStatusView = () => {
   const [stats, setStats] = useState(null);
   const [failedMessages, setFailedMessages] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('all'); // 'all', 'pending', 'manually_sent'
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
@@ -577,11 +1048,8 @@ const BroadcastStatusView = () => {
   };
 
   const handleSendViaWhatsApp = (phone, message) => {
-    // Clean phone number
     const cleanPhone = phone.replace(/[^0-9]/g, '');
-    // Encode message for URL
     const encodedMessage = encodeURIComponent(message);
-    // Open WhatsApp Web/App with pre-filled message
     const url = `https://wa.me/${cleanPhone}?text=${encodedMessage}`;
     window.open(url, '_blank');
   };
@@ -599,7 +1067,6 @@ const BroadcastStatusView = () => {
         body: JSON.stringify({ manually_sent_by: 'Dashboard User' })
       });
       
-      // Refresh data
       fetchBroadcastData();
       alert('Marked as manually sent!');
     } catch (err) {
@@ -609,19 +1076,13 @@ const BroadcastStatusView = () => {
   };
 
   const filteredMessages = failedMessages.filter(msg => {
-    // Search filter
-    if (searchTerm) {
-      const search = searchTerm.toLowerCase();
-      const name = (msg.recipient_name || '').toLowerCase();
-      const phone = (msg.phone_number || '').toLowerCase();
-      const message = (msg.message_text || '').toLowerCase();
-      
-      if (!name.includes(search) && !phone.includes(search) && !message.includes(search)) {
-        return false;
-      }
-    }
+    if (!searchTerm) return true;
+    const search = searchTerm.toLowerCase();
+    const name = (msg.recipient_name || '').toLowerCase();
+    const phone = (msg.phone_number || '').toLowerCase();
+    const message = (msg.message_text || '').toLowerCase();
     
-    return true;
+    return name.includes(search) || phone.includes(search) || message.includes(search);
   });
 
   if (loading) {
@@ -641,7 +1102,6 @@ const BroadcastStatusView = () => {
         <h2>📢 Broadcast Status</h2>
       </div>
 
-      {/* Broadcast Stats */}
       {stats && (
         <div className="broadcast-stats">
           <div className="broadcast-stat-card stat-total">
@@ -675,7 +1135,6 @@ const BroadcastStatusView = () => {
         </div>
       )}
 
-      {/* Search Bar */}
       <div className="broadcast-filters">
         <div className="broadcast-search-group">
           <label>🔍 Search Failed Messages</label>
@@ -691,32 +1150,14 @@ const BroadcastStatusView = () => {
         </button>
       </div>
 
-      {/* Failed Messages Header */}
       <div className="failed-messages-header">
         <h3>❌ Failed Messages ({filteredMessages.length})</h3>
-        {filteredMessages.length > 0 && (
-          <div className="bulk-actions">
-            <button 
-              className="btn btn-primary"
-              onClick={() => {
-                const allMessages = filteredMessages.map(msg => 
-                  `${msg.phone_number} - ${msg.recipient_name || 'Unknown'}:\n${msg.message_text}`
-                ).join('\n\n---\n\n');
-                navigator.clipboard.writeText(allMessages);
-                alert('All messages copied to clipboard!');
-              }}
-            >
-              📋 Copy All Messages
-            </button>
-          </div>
-        )}
       </div>
 
-      {/* Failed Messages List */}
       <div className="failed-messages-list">
         {filteredMessages.length === 0 ? (
           <div className="no-failed-messages">
-            <p>🎉 No failed messages! All broadcasts delivered successfully.</p>
+            <p>🎉 No failed messages!</p>
           </div>
         ) : (
           filteredMessages.map((msg, idx) => (
@@ -749,21 +1190,18 @@ const BroadcastStatusView = () => {
                 <button 
                   className="btn btn-whatsapp"
                   onClick={() => handleSendViaWhatsApp(msg.phone_number, msg.message_text)}
-                  title="Open WhatsApp with pre-filled message"
                 >
                   💬 Send via WhatsApp
                 </button>
                 <button 
                   className="btn btn-secondary"
                   onClick={() => handleCopyMessage(msg.message_text)}
-                  title="Copy message to clipboard"
                 >
                   📋 Copy Message
                 </button>
                 <button 
                   className="btn btn-resolve"
                   onClick={() => handleMarkAsSent(msg.id)}
-                  title="Mark this message as manually sent"
                 >
                   ✅ Mark as Sent
                 </button>
@@ -777,97 +1215,30 @@ const BroadcastStatusView = () => {
 };
 
 // ============================================
-// HELPER FUNCTIONS
-// ============================================
-const formatDate = (dateString) => {
-  if (!dateString) return '-';
-  try {
-    const date = new Date(dateString);
-    return date.toLocaleString('en-IN', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  } catch {
-    return '-';
-  }
-};
-
-// ============================================
 // MAIN APP COMPONENT
 // ============================================
 function App() {
-  // State
   const [users, setUsers] = useState([]);
-  const [queries, setQueries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeView, setActiveView] = useState('leads');
   
-  // Query Status Tracking (phone -> status)
-  const [queryStatuses, setQueryStatuses] = useState({});
-  
   // Filters
   const [timeFilter, setTimeFilter] = useState('All');
   const [participationFilter, setParticipationFilter] = useState('All');
-  const [queryStatusFilter, setQueryStatusFilter] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
   
   // Modals
-  const [queryModal, setQueryModal] = useState({ isOpen: false, data: null });
   const [userModal, setUserModal] = useState({ isOpen: false, userId: null });
-
-  // Load query statuses from localStorage
-  useEffect(() => {
-    const savedStatuses = localStorage.getItem('queryStatuses');
-    if (savedStatuses) {
-      setQueryStatuses(JSON.parse(savedStatuses));
-    }
-  }, []);
-
-  // Save query statuses to localStorage and update state
-  const updateQueryStatus = (phone, status) => {
-    const newStatuses = { ...queryStatuses, [phone]: status };
-    setQueryStatuses(newStatuses);
-    localStorage.setItem('queryStatuses', JSON.stringify(newStatuses));
-    
-    // Update modal data if open
-    if (queryModal.isOpen && queryModal.data?.phone === phone) {
-      setQueryModal({
-        ...queryModal,
-        data: { ...queryModal.data, status }
-      });
-    }
-  };
-
-  // Create query map (phone -> latest query)
-  const queryMap = {};
-  queries.forEach(q => {
-    const phone = q.user_phone;
-    if (phone) {
-      if (!queryMap[phone] || new Date(q.created_at) > new Date(queryMap[phone].created_at)) {
-        queryMap[phone] = q;
-      }
-    }
-  });
 
   // Fetch data
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [usersRes, queriesRes] = await Promise.all([
-          fetch(`${API_URL}/api/users`),
-          fetch(`${API_URL}/api/queries`)
-        ]);
-        
-        const usersData = await usersRes.json();
-        const queriesData = await queriesRes.json();
-        
-        setUsers(usersData.users || []);
-        setQueries(queriesData.queries || []);
+        const res = await fetch(`${API_URL}/api/users`);
+        const data = await res.json();
+        setUsers(data.users || []);
         setError(null);
       } catch (err) {
         setError('Failed to fetch data. Make sure backend is running.');
@@ -907,13 +1278,6 @@ function App() {
     if (participationFilter !== 'All' && user.participation_level !== participationFilter) {
       return false;
     }
-
-    // Query Status filter
-    if (queryStatusFilter !== 'All') {
-      if (!user.has_call_request) return false; // No query = skip
-      const status = queryStatuses[user.phone_number] || 'Pending';
-      if (queryStatusFilter !== status) return false;
-    }
     
     // Search filter
     if (searchTerm) {
@@ -929,46 +1293,22 @@ function App() {
     return true;
   });
 
-  // Handle query click
-  const handleQueryClick = (user) => {
-    const query = queryMap[user.phone_number];
-    const status = queryStatuses[user.phone_number] || 'Pending';
-    setQueryModal({
-      isOpen: true,
-      data: {
-        name: user.name,
-        phone: user.phone_number,
-        date: query ? formatDate(query.created_at) : '-',
-        message: query ? query.query_text : 'User requested counsellor but no specific query recorded.',
-        status: status
-      }
-    });
-  };
-
   // Handle user click
   const handleUserClick = (userId) => {
     setUserModal({ isOpen: true, userId });
   };
 
-  // Get query status for styling
-  const getQueryStatus = (phone) => {
-    return queryStatuses[phone] || 'Pending';
-  };
-
   // Download CSV
   const downloadCSV = () => {
-    const headers = ['Name', 'Email', 'Phone', 'Participation', 'Counsellor', 'Query Status', 'Query', 'Course Interest', 'First Seen', 'Last Active'];
+    const headers = ['Name', 'Email', 'Phone', 'Participation', 'Active Ticket', 'Total Tickets', 'Course Interest', 'First Seen', 'Last Active'];
     const rows = filteredUsers.map(user => {
-      const query = queryMap[user.phone_number];
-      const status = queryStatuses[user.phone_number] || 'Pending';
       return [
         user.name || '-',
         user.email || '-',
         user.phone_number || '-',
         user.participation_level || '-',
-        user.has_call_request ? 'Yes' : 'No',
-        user.has_call_request ? status : '-',
-        query ? query.query_text : '-',
+        user.has_active_ticket ? 'Yes' : 'No',
+        user.total_tickets || 0,
         (user.course_interests || []).join(', ') || '-',
         formatDate(user.first_seen),
         formatDate(user.last_interaction)
@@ -984,9 +1324,11 @@ function App() {
     a.click();
   };
 
-  // Render different views based on activeView
+  // Render different views
   const renderContent = () => {
     switch (activeView) {
+      case 'tickets':
+        return <TicketsView />;
       case 'feedbacks':
         return <FeedbacksView />;
       case 'courses':
@@ -998,7 +1340,7 @@ function App() {
     }
   };
 
-  // Leads View (main table)
+  // Leads View
   const renderLeadsView = () => {
     if (loading) {
       return (
@@ -1022,10 +1364,8 @@ function App() {
 
     return (
       <>
-        {/* Stats */}
         <StatsCards users={filteredUsers} />
 
-        {/* Table Header */}
         <div className="table-header">
           <span className="lead-count">📊 Total Leads: <strong>{filteredUsers.length}</strong></span>
           <button className="btn btn-download" onClick={downloadCSV}>
@@ -1033,7 +1373,6 @@ function App() {
           </button>
         </div>
 
-        {/* Leads Table */}
         <div className="table-container">
           <table className="leads-table">
             <thead>
@@ -1042,8 +1381,8 @@ function App() {
                 <th>Email</th>
                 <th>Phone</th>
                 <th>Participation</th>
-                <th>Counsellor</th>
-                <th>Query</th>
+                <th>Active Ticket</th>
+                <th>Total Tickets</th>
                 <th>Course Interest</th>
                 <th>First Seen</th>
                 <th>Last Active</th>
@@ -1055,76 +1394,65 @@ function App() {
                   <td colSpan="9" className="no-data">No leads found</td>
                 </tr>
               ) : (
-                filteredUsers.map(user => {
-                  const queryStatus = getQueryStatus(user.phone_number);
-                  const isResolved = queryStatus === 'Resolved';
-                  
-                  return (
-                    <tr key={user.id}>
-                      <td>
-                        <button 
-                          className="name-link"
-                          onClick={() => handleUserClick(user.id)}
-                        >
-                          {user.name || '-'}
-                        </button>
-                      </td>
-                      <td>{user.email || '-'}</td>
-                      <td className="phone-cell">
-                        {user.phone_number ? (
-                          <>
-                            <a href={`tel:${user.phone_number}`} className="icon-btn" title="Call">📞</a>
-                            <span>{user.phone_number}</span>
-                            <a 
-                              href={`https://wa.me/${user.phone_number}`} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="whatsapp-btn"
-                              title="WhatsApp"
-                            >
-                              💬
-                            </a>
-                          </>
-                        ) : '-'}
-                      </td>
-                      <td>
-                        <span className={`badge ${
-                          user.participation_level === 'Enrolled Participant' ? 'badge-success' :
-                          user.participation_level === 'New to platform' ? 'badge-info' : 'badge-default'
-                        }`}>
-                          {user.participation_level === 'Enrolled Participant' ? 'Enrolled' :
-                           user.participation_level === 'New to platform' ? 'New' :
-                           user.participation_level || '-'}
-                        </span>
-                      </td>
-                      <td>{user.has_call_request ? 'Yes' : 'No'}</td>
-                      <td>
-                        {user.has_call_request ? (
-                          <button 
-                            className={`query-btn ${isResolved ? 'query-resolved' : 'query-pending'}`}
-                            onClick={() => handleQueryClick(user)}
-                            title={`View Query (${queryStatus})`}
+                filteredUsers.map(user => (
+                  <tr key={user.id}>
+                    <td>
+                      <button 
+                        className="name-link"
+                        onClick={() => handleUserClick(user.id)}
+                      >
+                        {user.name || '-'}
+                      </button>
+                    </td>
+                    <td>{user.email || '-'}</td>
+                    <td className="phone-cell">
+                      {user.phone_number ? (
+                        <>
+                          <a href={`tel:${user.phone_number}`} className="icon-btn" title="Call">📞</a>
+                          <span>{user.phone_number}</span>
+                          <a 
+                            href={`https://wa.me/${user.phone_number}`} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="whatsapp-btn"
+                            title="WhatsApp"
                           >
                             💬
-                          </button>
-                        ) : (
-                          <span className="dot">•</span>
-                        )}
-                      </td>
-                      <td>
-                        {(user.course_interests || []).length > 0 ? (
-                          <div className="course-tags">
-                            {user.course_interests.map((course, idx) => (
-                              <span key={idx} className="course-tag">{course}</span>
-                            ))}
-                          </div>
-                        ) : '-'}
-                      </td>
-                      <td>{formatDate(user.first_seen)}</td>
-                      <td>{formatDate(user.last_interaction)}</td>
-                    </tr>
-                  );
-                })
+                          </a>
+                        </>
+                      ) : '-'}
+                    </td>
+                    <td>
+                      <span className={`badge ${
+                        user.participation_level === 'Enrolled Participant' ? 'badge-success' :
+                        user.participation_level === 'New to platform' ? 'badge-info' : 'badge-default'
+                      }`}>
+                        {user.participation_level === 'Enrolled Participant' ? 'Enrolled' :
+                         user.participation_level === 'New to platform' ? 'New' :
+                         user.participation_level || '-'}
+                      </span>
+                    </td>
+                    <td>
+                      {user.has_active_ticket ? (
+                        <span className="badge badge-warning">🎫 Yes</span>
+                      ) : (
+                        <span className="dot">•</span>
+                      )}
+                    </td>
+                    <td>{user.total_tickets || 0}</td>
+                    <td>
+                      {(user.course_interests || []).length > 0 ? (
+                        <div className="course-tags">
+                          {user.course_interests.map((course, idx) => (
+                            <span key={idx} className="course-tag">{course}</span>
+                          ))}
+                        </div>
+                      ) : '-'}
+                    </td>
+                    <td>{formatDate(user.first_seen)}</td>
+                    <td>{formatDate(user.last_interaction)}</td>
+                  </tr>
+                ))
               )}
             </tbody>
           </table>
@@ -1169,15 +1497,6 @@ function App() {
               <option value="Unknown">Unknown</option>
             </select>
           </div>
-
-          <div className="filter-group">
-            <label>📊 Query Status</label>
-            <select value={queryStatusFilter} onChange={(e) => setQueryStatusFilter(e.target.value)}>
-              <option value="All">All</option>
-              <option value="Pending">Pending</option>
-              <option value="Resolved">Resolved</option>
-            </select>
-          </div>
           
           <div className="filter-group search-group">
             <label>🔍 Search</label>
@@ -1205,17 +1524,10 @@ function App() {
 
       {/* Footer */}
       <footer className="footer">
-        <p>Last updated: {new Date().toLocaleString('en-IN')} | Iron Lady WATI Analytics v4.1.0 - Broadcast Tracking</p>
+        <p>Last updated: {new Date().toLocaleString('en-IN')} | Iron Lady WATI Analytics v5.0.0 - Ticket System</p>
       </footer>
 
       {/* Modals */}
-      <QueryModal 
-        isOpen={queryModal.isOpen}
-        onClose={() => setQueryModal({ isOpen: false, data: null })}
-        data={queryModal.data}
-        onStatusChange={updateQueryStatus}
-      />
-      
       <UserDetailModal
         isOpen={userModal.isOpen}
         onClose={() => setUserModal({ isOpen: false, userId: null })}
