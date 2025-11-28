@@ -1,5 +1,6 @@
 /* ============================================
-   Iron Lady React Dashboard - Styles
+   Iron Lady React Dashboard - Styles v5.0.0
+   With Ticket System & Conversation View
    ============================================ */
 
 /* Reset & Base */
@@ -243,9 +244,14 @@ body {
   color: white;
 }
 
-.btn-primary:hover {
+.btn-primary:hover:not(:disabled) {
   transform: translateY(-2px);
   box-shadow: 0 5px 15px rgba(139, 0, 0, 0.3);
+}
+
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .btn-refresh {
@@ -288,14 +294,36 @@ body {
   box-shadow: 0 5px 15px rgba(17, 153, 142, 0.3);
 }
 
-.btn-pending {
+.btn-reopen {
   background: linear-gradient(135deg, #f7971e, #ffd200);
   color: white;
 }
 
-.btn-pending:hover {
+.btn-reopen:hover {
   transform: translateY(-2px);
   box-shadow: 0 5px 15px rgba(247, 151, 30, 0.3);
+}
+
+.btn-secondary {
+  background: linear-gradient(135deg, #6c757d, #5a6268);
+  color: white;
+}
+
+.btn-secondary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(108, 117, 125, 0.3);
+}
+
+.btn-view {
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: white;
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+}
+
+.btn-view:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
 }
 
 /* ============================================
@@ -429,66 +457,91 @@ body {
   color: #495057;
 }
 
-/* ============================================
-   Status Badges (for Modal)
-   ============================================ */
-.status-badge {
-  padding: 0.5rem 1rem;
-  border-radius: 20px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  display: inline-block;
+.badge-warning {
+  background: #fff3cd;
+  color: #856404;
 }
 
-.status-resolved {
-  background: linear-gradient(135deg, #d4edda, #c3e6cb);
-  color: #155724;
-  border: 2px solid #28a745;
+/* ============================================
+   Status Badges
+   ============================================ */
+.status-badge {
+  padding: 0.4rem 0.8rem;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .status-pending {
   background: linear-gradient(135deg, #fff3cd, #ffeeba);
   color: #856404;
-  border: 2px solid #ffc107;
+}
+
+.status-in-progress {
+  background: linear-gradient(135deg, #cce5ff, #b8daff);
+  color: #004085;
+}
+
+.status-resolved {
+  background: linear-gradient(135deg, #d4edda, #c3e6cb);
+  color: #155724;
+}
+
+.status-badge-large {
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+  border-radius: 25px;
+  text-transform: capitalize;
 }
 
 /* ============================================
-   Query Button - With Status Colors
+   Category Badges
    ============================================ */
-.query-btn {
-  border: none;
-  padding: 0.6rem 0.9rem;
-  border-radius: 10px;
-  cursor: pointer;
-  font-size: 1.1rem;
-  transition: all 0.3s ease;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.category-badge {
+  padding: 0.4rem 0.8rem;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 600;
 }
 
-/* Pending status - Orange/Yellow gradient */
-.query-btn.query-pending {
-  background: linear-gradient(135deg, #f7971e, #ffd200);
-  color: white;
-  box-shadow: 0 3px 10px rgba(247, 151, 30, 0.4);
+.category-query {
+  background: linear-gradient(135deg, #e0cffc, #d0bfff);
+  color: #5a3d8a;
 }
 
-.query-btn.query-pending:hover {
-  transform: scale(1.1);
-  box-shadow: 0 5px 20px rgba(247, 151, 30, 0.5);
+.category-concern {
+  background: linear-gradient(135deg, #ffebcc, #ffd699);
+  color: #8a5a00;
 }
 
-/* Resolved status - Green gradient */
-.query-btn.query-resolved {
-  background: linear-gradient(135deg, #11998e, #38ef7d);
-  color: white;
-  box-shadow: 0 3px 10px rgba(17, 153, 142, 0.4);
+/* ============================================
+   24hr Window Badges
+   ============================================ */
+.window-badge {
+  padding: 0.4rem 0.8rem;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 600;
 }
 
-.query-btn.query-resolved:hover {
-  transform: scale(1.1);
-  box-shadow: 0 5px 20px rgba(17, 153, 142, 0.5);
+.window-active {
+  background: linear-gradient(135deg, #d4edda, #c3e6cb);
+  color: #155724;
+}
+
+.window-expired {
+  background: linear-gradient(135deg, #f8d7da, #f5c6cb);
+  color: #721c24;
+}
+
+.window-indicator {
+  padding: 0.3rem 0.6rem;
+  border-radius: 15px;
+  font-size: 0.75rem;
+  font-weight: 600;
 }
 
 .dot {
@@ -515,7 +568,7 @@ body {
 }
 
 /* ============================================
-   View Container (Shared for Feedbacks, Courses, etc.)
+   View Container
    ============================================ */
 .view-container {
   background: white;
@@ -585,6 +638,559 @@ body {
 }
 
 /* ============================================
+   Ticket Stats Bar
+   ============================================ */
+.ticket-stats-bar {
+  display: flex;
+  gap: 1rem;
+  padding: 1.5rem 2rem;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  flex-wrap: wrap;
+}
+
+.ticket-stat {
+  background: white;
+  padding: 1rem 1.5rem;
+  border-radius: 12px;
+  text-align: center;
+  min-width: 100px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.ticket-stat-number {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #333;
+  display: block;
+}
+
+.ticket-stat-label {
+  font-size: 0.8rem;
+  color: #666;
+}
+
+.ticket-stat-pending { border-left: 4px solid #ffc107; }
+.ticket-stat-progress { border-left: 4px solid #007bff; }
+.ticket-stat-resolved { border-left: 4px solid #28a745; }
+.ticket-stat-queries { border-left: 4px solid #6f42c1; }
+.ticket-stat-concerns { border-left: 4px solid #fd7e14; }
+
+/* ============================================
+   Ticket Filters
+   ============================================ */
+.ticket-filters {
+  display: flex;
+  gap: 1.5rem;
+  padding: 1.5rem 2rem;
+  background: white;
+  border-bottom: 1px solid #e0e0e0;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+/* ============================================
+   Tickets List
+   ============================================ */
+.tickets-list {
+  padding: 1.5rem 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.ticket-card {
+  background: white;
+  border: 2px solid #e0e0e0;
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.ticket-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12);
+  border-color: #8B0000;
+}
+
+.ticket-card.ticket-pending {
+  border-left: 5px solid #ffc107;
+}
+
+.ticket-card.ticket-in_progress {
+  border-left: 5px solid #007bff;
+}
+
+.ticket-card.ticket-resolved {
+  border-left: 5px solid #28a745;
+}
+
+.ticket-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.5rem;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.ticket-number-section {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.ticket-number {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #8B0000;
+}
+
+.ticket-status-section {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.ticket-card-body {
+  padding: 1rem 1.5rem;
+}
+
+.ticket-user {
+  display: flex;
+  gap: 1.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.ticket-user .user-name {
+  font-weight: 600;
+  color: #333;
+}
+
+.ticket-user .user-phone {
+  color: #666;
+}
+
+.ticket-message {
+  color: #555;
+  line-height: 1.5;
+  background: #f8f9fa;
+  padding: 0.75rem;
+  border-radius: 8px;
+  border-left: 3px solid #8B0000;
+}
+
+.ticket-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1.5rem;
+  background: #fafafa;
+  border-top: 1px solid #e0e0e0;
+}
+
+.ticket-date,
+.ticket-messages {
+  font-size: 0.85rem;
+  color: #888;
+}
+
+/* ============================================
+   Modal Styles
+   ============================================ */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.3s ease;
+  padding: 1rem;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.modal-container {
+  background: white;
+  border-radius: 20px;
+  width: 90%;
+  max-width: 500px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: slideUp 0.3s ease;
+}
+
+.modal-large {
+  max-width: 700px;
+}
+
+.modal-ticket {
+  max-width: 800px;
+  max-height: 95vh;
+}
+
+@keyframes slideUp {
+  from { 
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to { 
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.modal-header {
+  background: linear-gradient(135deg, #8B0000, #c41e3a);
+  color: white;
+  padding: 1.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-radius: 20px 20px 0 0;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.modal-header h2 {
+  font-size: 1.3rem;
+  font-weight: 600;
+}
+
+.modal-close {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  font-size: 1.2rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.modal-close:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.modal-body {
+  padding: 1.5rem;
+}
+
+.modal-footer {
+  padding: 1rem 1.5rem 1.5rem;
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  border-top: 1px solid #e0e0e0;
+}
+
+/* ============================================
+   Ticket Modal Specific Styles
+   ============================================ */
+.ticket-info-bar {
+  display: flex;
+  gap: 1.5rem;
+  padding: 1rem 1.5rem;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  flex-wrap: wrap;
+}
+
+.ticket-info-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.info-label {
+  font-size: 0.85rem;
+  color: #666;
+  font-weight: 500;
+}
+
+.ticket-user-info {
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.user-info-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.user-icon {
+  font-size: 1.5rem;
+}
+
+.user-name {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #333;
+}
+
+.user-email {
+  font-size: 0.9rem;
+  color: #666;
+  margin-top: 0.5rem;
+}
+
+.ticket-dates {
+  font-size: 0.85rem;
+  color: #888;
+  margin-top: 0.5rem;
+}
+
+.contact-btn {
+  padding: 0.4rem 0.8rem;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.phone-btn {
+  background: #e3f2fd;
+  color: #1565c0;
+}
+
+.phone-btn:hover {
+  background: #1565c0;
+  color: white;
+}
+
+.whatsapp-btn-small {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.whatsapp-btn-small:hover {
+  background: #25D366;
+  color: white;
+}
+
+/* ============================================
+   Conversation Container
+   ============================================ */
+.conversation-container {
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.conversation-title {
+  font-size: 1rem;
+  color: #333;
+  margin-bottom: 1rem;
+  font-weight: 600;
+}
+
+.messages-list {
+  max-height: 300px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.5rem;
+  background: #f8f9fa;
+  border-radius: 12px;
+}
+
+.no-messages {
+  text-align: center;
+  padding: 2rem;
+  color: #888;
+}
+
+.message-bubble {
+  max-width: 85%;
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
+  animation: messageIn 0.3s ease;
+}
+
+@keyframes messageIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.message-incoming {
+  background: white;
+  border: 1px solid #e0e0e0;
+  align-self: flex-start;
+  border-bottom-left-radius: 4px;
+}
+
+.message-outgoing {
+  background: linear-gradient(135deg, #8B0000, #c41e3a);
+  color: white;
+  align-self: flex-end;
+  border-bottom-right-radius: 4px;
+}
+
+.message-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+  gap: 1rem;
+}
+
+.message-sender {
+  font-size: 0.8rem;
+  font-weight: 600;
+  opacity: 0.9;
+}
+
+.message-time {
+  font-size: 0.75rem;
+  opacity: 0.7;
+}
+
+.message-content {
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.message-media {
+  margin-top: 0.5rem;
+}
+
+.message-media a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+.message-status {
+  font-size: 0.7rem;
+  text-align: right;
+  margin-top: 0.25rem;
+  opacity: 0.8;
+}
+
+/* ============================================
+   Reply Section
+   ============================================ */
+.reply-section {
+  padding: 1rem 1.5rem;
+  background: #f8f9fa;
+}
+
+.reply-textarea {
+  width: 100%;
+  padding: 1rem;
+  border: 2px solid #e0e0e0;
+  border-radius: 12px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  resize: vertical;
+  transition: border-color 0.3s ease;
+}
+
+.reply-textarea:focus {
+  outline: none;
+  border-color: #8B0000;
+}
+
+.reply-textarea:disabled {
+  background: #f0f0f0;
+  cursor: not-allowed;
+}
+
+.reply-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 1rem;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.reply-note {
+  font-size: 0.8rem;
+  color: #666;
+}
+
+.window-expired-warning {
+  background: linear-gradient(135deg, #fff3cd 0%, #ffeeba 100%);
+  border: 1px solid #ffc107;
+  border-radius: 12px;
+  padding: 1rem;
+  color: #856404;
+  text-align: center;
+  line-height: 1.6;
+}
+
+.error-message {
+  background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
+  border: 1px solid #f5c6cb;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  color: #721c24;
+  margin-bottom: 1rem;
+}
+
+.ticket-footer {
+  background: #f8f9fa;
+}
+
+/* ============================================
+   User Details Grid
+   ============================================ */
+.user-details-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1.5rem;
+}
+
+.detail-card {
+  background: #f8f9fa;
+  border-radius: 12px;
+  padding: 1.5rem;
+}
+
+.detail-card h3 {
+  color: #8B0000;
+  margin-bottom: 1rem;
+  font-size: 1.1rem;
+}
+
+.detail-row {
+  display: flex;
+  margin-bottom: 0.75rem;
+}
+
+.detail-label {
+  font-weight: 600;
+  color: #555;
+  min-width: 120px;
+}
+
+.detail-value {
+  color: #333;
+}
+
+/* ============================================
    Course Interests View
    ============================================ */
 .course-overview {
@@ -650,81 +1256,6 @@ body {
   border-radius: 12px;
   padding: 1.5rem;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-}
-
-.chart-title {
-  font-size: 1rem;
-  color: #555;
-  margin-bottom: 1.5rem;
-  text-align: center;
-  font-weight: 600;
-}
-
-/* Simple Bar Chart Styles */
-.simple-chart {
-  width: 100%;
-  height: 250px;
-  display: flex;
-  flex-direction: column;
-}
-
-.chart-bars {
-  flex: 1;
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-around;
-  gap: 1rem;
-  padding: 0 1rem;
-}
-
-.chart-bar-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  flex: 1;
-  max-width: 80px;
-}
-
-.chart-bar-wrapper {
-  width: 100%;
-  height: 180px;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-}
-
-.chart-bar {
-  width: 100%;
-  max-width: 50px;
-  background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
-  border-radius: 8px 8px 0 0;
-  position: relative;
-  transition: all 0.3s ease;
-  min-height: 20px;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-}
-
-.chart-bar:hover {
-  transform: scaleX(1.1);
-  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
-}
-
-.chart-bar-value {
-  position: absolute;
-  top: -25px;
-  font-size: 0.85rem;
-  font-weight: 700;
-  color: #333;
-}
-
-.chart-bar-label {
-  margin-top: 0.75rem;
-  font-size: 0.8rem;
-  color: #666;
-  font-weight: 600;
-  text-align: center;
 }
 
 .chart-title {
@@ -1001,19 +1532,6 @@ body {
 }
 
 /* ============================================
-   Coming Soon
-   ============================================ */
-.coming-soon {
-  text-align: center;
-  padding: 5rem 2rem;
-  color: #888;
-}
-
-.coming-soon p {
-  font-size: 1.2rem;
-}
-
-/* ============================================
    Broadcast Status View
    ============================================ */
 .broadcast-stats {
@@ -1123,11 +1641,6 @@ body {
   font-size: 1.25rem;
   font-weight: 600;
   margin: 0;
-}
-
-.bulk-actions {
-  display: flex;
-  gap: 1rem;
 }
 
 .failed-messages-list {
@@ -1253,212 +1766,6 @@ body {
   flex-wrap: wrap;
 }
 
-.btn-secondary {
-  background: linear-gradient(135deg, #6c757d, #5a6268);
-  color: white;
-}
-
-.btn-secondary:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 5px 15px rgba(108, 117, 125, 0.3);
-}
-
-/* Responsive adjustments */
-@media (max-width: 768px) {
-  .broadcast-stats {
-    grid-template-columns: repeat(2, 1fr);
-    padding: 1rem;
-  }
-
-  .broadcast-filters {
-    flex-direction: column;
-    padding: 1rem;
-  }
-
-  .failed-messages-header {
-    flex-direction: column;
-    gap: 1rem;
-    align-items: flex-start;
-  }
-
-  .failed-messages-list {
-    padding: 1rem;
-  }
-
-  .failed-message-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.5rem;
-  }
-
-  .failed-message-meta {
-    text-align: left;
-  }
-
-  .failed-message-actions {
-    flex-direction: column;
-  }
-
-  .failed-message-actions .btn {
-    width: 100%;
-  }
-}
-
-/* ============================================
-   Modal Overlay & Container
-   ============================================ */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.6);
-  -webkit-backdrop-filter: blur(4px);
-  backdrop-filter: blur(4px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  animation: fadeIn 0.3s ease;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-.modal-container {
-  background: white;
-  border-radius: 20px;
-  width: 90%;
-  max-width: 500px;
-  max-height: 80vh;
-  overflow-y: auto;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-  animation: slideUp 0.3s ease;
-}
-
-.modal-large {
-  max-width: 700px;
-}
-
-@keyframes slideUp {
-  from { 
-    opacity: 0;
-    transform: translateY(30px);
-  }
-  to { 
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.modal-header {
-  background: linear-gradient(135deg, #8B0000, #c41e3a);
-  color: white;
-  padding: 1.5rem;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-radius: 20px 20px 0 0;
-}
-
-.modal-header h2 {
-  font-size: 1.3rem;
-  font-weight: 600;
-}
-
-.modal-close {
-  background: rgba(255, 255, 255, 0.2);
-  border: none;
-  color: white;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  font-size: 1.2rem;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.modal-close:hover {
-  background: rgba(255, 255, 255, 0.3);
-}
-
-.modal-body {
-  padding: 1.5rem;
-}
-
-.modal-field {
-  margin-bottom: 1rem;
-}
-
-.modal-label {
-  font-weight: 600;
-  color: #8B0000;
-  font-size: 0.9rem;
-}
-
-.modal-value {
-  color: #333;
-  margin-left: 0.5rem;
-}
-
-.modal-message {
-  background: #f8f9fa;
-  border: 1px solid #e0e0e0;
-  border-radius: 12px;
-  padding: 1rem;
-  margin-top: 0.5rem;
-  white-space: pre-wrap;
-  line-height: 1.6;
-  color: #444;
-}
-
-.modal-footer {
-  padding: 1rem 1.5rem 1.5rem;
-  display: flex;
-  gap: 1rem;
-  justify-content: center;
-  flex-wrap: wrap;
-}
-
-/* ============================================
-   User Details Grid
-   ============================================ */
-.user-details-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 1.5rem;
-}
-
-.detail-card {
-  background: #f8f9fa;
-  border-radius: 12px;
-  padding: 1.5rem;
-}
-
-.detail-card h3 {
-  color: #8B0000;
-  margin-bottom: 1rem;
-  font-size: 1.1rem;
-}
-
-.detail-row {
-  display: flex;
-  margin-bottom: 0.75rem;
-}
-
-.detail-label {
-  font-weight: 600;
-  color: #555;
-  min-width: 120px;
-}
-
-.detail-value {
-  color: #333;
-}
-
 /* ============================================
    Loading & Error States
    ============================================ */
@@ -1526,6 +1833,10 @@ body {
   .course-overview-content {
     grid-template-columns: 1fr;
   }
+
+  .modal-ticket {
+    max-width: 95%;
+  }
 }
 
 @media (max-width: 768px) {
@@ -1569,6 +1880,48 @@ body {
     min-width: 900px;
   }
 
+  .ticket-stats-bar {
+    flex-direction: column;
+    padding: 1rem;
+  }
+
+  .ticket-stat {
+    width: 100%;
+  }
+
+  .ticket-filters {
+    flex-direction: column;
+    padding: 1rem;
+  }
+
+  .ticket-card-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+
+  .ticket-info-bar {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .user-info-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .reply-actions {
+    flex-direction: column;
+  }
+
+  .modal-footer {
+    flex-direction: column;
+  }
+
+  .modal-footer .btn {
+    width: 100%;
+  }
+
   .feedback-contact-row {
     flex-direction: column;
     gap: 0.75rem;
@@ -1580,23 +1933,41 @@ body {
     gap: 0.25rem;
   }
 
-  .view-header {
-    padding: 1rem 1.5rem;
-  }
-
-  .view-header h2 {
-    font-size: 1.25rem;
-  }
-
-  .feedbacks-list {
+  .broadcast-stats {
+    grid-template-columns: repeat(2, 1fr);
     padding: 1rem;
   }
 
-  .course-overview {
+  .broadcast-filters {
+    flex-direction: column;
     padding: 1rem;
   }
 
-  .course-users-view {
+  .failed-messages-header {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: flex-start;
+  }
+
+  .failed-messages-list {
     padding: 1rem;
+  }
+
+  .failed-message-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+
+  .failed-message-meta {
+    text-align: left;
+  }
+
+  .failed-message-actions {
+    flex-direction: column;
+  }
+
+  .failed-message-actions .btn {
+    width: 100%;
   }
 }
