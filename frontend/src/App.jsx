@@ -69,6 +69,64 @@ const getStatusIcon = (status) => {
 };
 
 // ============================================
+// COUNSELLOR QUERY TOOLTIP COMPONENT
+// ============================================
+const CounsellorQueryBadge = ({ query, requestedAt, userId, onMarkDone }) => {
+  const [showTooltip, setShowTooltip] = useState(false);
+  const [marking, setMarking] = useState(false);
+
+  const handleMarkDone = async (e) => {
+    e.stopPropagation();
+    setMarking(true);
+    try {
+      await fetch(`${API_URL}/api/users/${userId}/counsellor-done`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resolved_by: 'Dashboard User' })
+      });
+      if (onMarkDone) onMarkDone();
+    } catch (err) {
+      console.error(err);
+    }
+    setMarking(false);
+  };
+
+  if (!query) return <span className="dot">•</span>;
+
+  return (
+    <div 
+      className="counsellor-query-badge-container"
+      onMouseEnter={() => setShowTooltip(true)}
+      onMouseLeave={() => setShowTooltip(false)}
+    >
+      <span className="counsellor-query-icon" title="Click to see query">
+        📞💬
+      </span>
+      {showTooltip && (
+        <div className="counsellor-tooltip">
+          <div className="tooltip-header">
+            <span>📞 Counsellor Request</span>
+            {requestedAt && <span className="tooltip-date">{formatDate(requestedAt)}</span>}
+          </div>
+          <div className="tooltip-content">
+            <p className="tooltip-query">{query}</p>
+          </div>
+          <div className="tooltip-actions">
+            <button 
+              className="btn btn-sm btn-resolve"
+              onClick={handleMarkDone}
+              disabled={marking}
+            >
+              {marking ? '...' : '✅ Mark Done'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ============================================
 // TICKET DETAIL MODAL WITH CONVERSATION
 // ============================================
 const TicketDetailModal = ({ isOpen, onClose, ticketId, onTicketUpdate }) => {
@@ -121,7 +179,7 @@ const TicketDetailModal = ({ isOpen, onClose, ticketId, onTicketUpdate }) => {
       
       if (res.ok && data.success) {
         setReplyText('');
-        fetchTicketDetails(); // Refresh conversation
+        fetchTicketDetails();
         if (onTicketUpdate) onTicketUpdate();
       } else {
         setError(data.detail || 'Failed to send reply');
@@ -354,7 +412,7 @@ const UserDetailModal = ({ isOpen, onClose, userId }) => {
       fetch(`${API_URL}/api/users/${userId}`)
         .then(res => res.json())
         .then(data => {
-          setUser(data.user);
+          setUser(data);
           setLoading(false);
         })
         .catch(err => {
@@ -376,55 +434,103 @@ const UserDetailModal = ({ isOpen, onClose, userId }) => {
         <div className="modal-body">
           {loading ? (
             <div className="loading">Loading...</div>
-          ) : user ? (
+          ) : user?.user ? (
             <div className="user-details-grid">
               <div className="detail-card">
                 <h3>📋 Basic Information</h3>
                 <div className="detail-row">
                   <span className="detail-label">Name:</span>
-                  <span className="detail-value">{user.name || '-'}</span>
+                  <span className="detail-value">{user.user.name || '-'}</span>
                 </div>
                 <div className="detail-row">
                   <span className="detail-label">Email:</span>
-                  <span className="detail-value">{user.email || '-'}</span>
+                  <span className="detail-value">{user.user.email || '-'}</span>
                 </div>
                 <div className="detail-row">
                   <span className="detail-label">Phone:</span>
-                  <span className="detail-value">{user.phone_number || '-'}</span>
+                  <span className="detail-value">{user.user.phone_number || '-'}</span>
                 </div>
                 <div className="detail-row">
                   <span className="detail-label">Participation:</span>
-                  <span className="detail-value">{user.participation_level || '-'}</span>
+                  <span className="detail-value">{user.user.participation_level || '-'}</span>
                 </div>
                 <div className="detail-row">
                   <span className="detail-label">Enrolled Program:</span>
-                  <span className="detail-value">{user.enrolled_program || '-'}</span>
+                  <span className="detail-value">{user.user.enrolled_program || '-'}</span>
                 </div>
               </div>
               <div className="detail-card">
                 <h3>📊 Activity</h3>
                 <div className="detail-row">
                   <span className="detail-label">First Seen:</span>
-                  <span className="detail-value">{formatDate(user.first_seen)}</span>
+                  <span className="detail-value">{formatDate(user.user.first_seen)}</span>
                 </div>
                 <div className="detail-row">
                   <span className="detail-label">Last Active:</span>
-                  <span className="detail-value">{formatDate(user.last_interaction)}</span>
+                  <span className="detail-value">{formatDate(user.user.last_interaction)}</span>
                 </div>
                 <div className="detail-row">
                   <span className="detail-label">Active Ticket:</span>
-                  <span className="detail-value">{user.has_active_ticket ? 'Yes' : 'No'}</span>
+                  <span className="detail-value">{user.user.has_active_ticket ? 'Yes' : 'No'}</span>
+                </div>
+                <div className="detail-row">
+                  <span className="detail-label">Needs Counsellor:</span>
+                  <span className="detail-value">{user.user.needs_counsellor ? 'Yes' : 'No'}</span>
                 </div>
               </div>
+              
+              {/* Counsellor Query Section */}
+              {user.user.counsellor_query && (
+                <div className="detail-card detail-card-full">
+                  <h3>📞 Counsellor Query</h3>
+                  <div className="counsellor-query-detail">
+                    <p>{user.user.counsellor_query}</p>
+                    <span className="query-date">Requested: {formatDate(user.user.counsellor_requested_at)}</span>
+                  </div>
+                </div>
+              )}
+              
+              {/* Feedbacks Section */}
+              {user.feedbacks && user.feedbacks.length > 0 && (
+                <div className="detail-card detail-card-full">
+                  <h3>💬 Feedbacks ({user.feedbacks.length})</h3>
+                  <div className="feedbacks-mini-list">
+                    {user.feedbacks.map((fb, idx) => (
+                      <div key={idx} className="feedback-mini-item">
+                        <p>{fb.feedback_text}</p>
+                        <span className="feedback-mini-date">{formatDate(fb.created_at)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {/* Tickets Section */}
+              {user.tickets && user.tickets.length > 0 && (
+                <div className="detail-card detail-card-full">
+                  <h3>🎫 Tickets ({user.tickets.length})</h3>
+                  <div className="tickets-mini-list">
+                    {user.tickets.map((t, idx) => (
+                      <div key={idx} className="ticket-mini-item">
+                        <span className="ticket-mini-number">{t.ticket_number}</span>
+                        <span className={`status-badge ${getStatusBadgeClass(t.status)}`}>
+                          {t.status}
+                        </span>
+                        <span className="ticket-mini-date">{formatDate(t.created_at)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="error">User not found</div>
           )}
         </div>
-        {user && (
+        {user?.user && (
           <div className="modal-footer">
-            <a href={`tel:${user.phone_number}`} className="btn btn-call">📞 Call</a>
-            <a href={`https://wa.me/${user.phone_number}`} target="_blank" rel="noopener noreferrer" className="btn btn-whatsapp">💬 WhatsApp</a>
+            <a href={`tel:${user.user.phone_number}`} className="btn btn-call">📞 Call</a>
+            <a href={`https://wa.me/${user.user.phone_number}`} target="_blank" rel="noopener noreferrer" className="btn btn-whatsapp">💬 WhatsApp</a>
           </div>
         )}
       </div>
@@ -439,8 +545,8 @@ const TicketsView = () => {
   const [tickets, setTickets] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('all'); // all, queries, concerns
-  const [statusFilter, setStatusFilter] = useState('all'); // all, pending, in_progress, resolved
+  const [activeTab, setActiveTab] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTicketId, setSelectedTicketId] = useState(null);
 
@@ -473,7 +579,6 @@ const TicketsView = () => {
     fetchTickets();
   }, [fetchTickets]);
 
-  // Filter tickets by search
   const filteredTickets = tickets.filter(t => {
     if (!searchTerm) return true;
     const search = searchTerm.toLowerCase();
@@ -491,7 +596,6 @@ const TicketsView = () => {
         <h2>🎫 Support Tickets</h2>
       </div>
 
-      {/* Stats Bar */}
       {stats && (
         <div className="ticket-stats-bar">
           <div className="ticket-stat">
@@ -511,17 +615,16 @@ const TicketsView = () => {
             <span className="ticket-stat-label">Resolved</span>
           </div>
           <div className="ticket-stat ticket-stat-queries">
-            <span className="ticket-stat-number">{stats.queries}</span>
+            <span className="ticket-stat-number">{stats.queries || 0}</span>
             <span className="ticket-stat-label">Queries</span>
           </div>
           <div className="ticket-stat ticket-stat-concerns">
-            <span className="ticket-stat-number">{stats.concerns}</span>
+            <span className="ticket-stat-number">{stats.concerns || 0}</span>
             <span className="ticket-stat-label">Concerns</span>
           </div>
         </div>
       )}
 
-      {/* Tabs */}
       <div className="tabs-container">
         <button
           className={`tab-btn ${activeTab === 'all' ? 'active' : ''}`}
@@ -543,7 +646,6 @@ const TicketsView = () => {
         </button>
       </div>
 
-      {/* Filters */}
       <div className="ticket-filters">
         <div className="filter-group">
           <label>Status:</label>
@@ -568,7 +670,6 @@ const TicketsView = () => {
         </button>
       </div>
 
-      {/* Tickets List */}
       {loading ? (
         <div className="loading-container">
           <div className="spinner"></div>
@@ -638,7 +739,6 @@ const TicketsView = () => {
         </div>
       )}
 
-      {/* Ticket Detail Modal */}
       <TicketDetailModal
         isOpen={selectedTicketId !== null}
         onClose={() => setSelectedTicketId(null)}
@@ -656,7 +756,7 @@ const StatsCards = ({ users }) => {
   const totalLeads = users.length;
   const newUsers = users.filter(u => u.participation_level === 'New to platform').length;
   const enrolled = users.filter(u => u.participation_level === 'Enrolled Participant').length;
-  const withActiveTickets = users.filter(u => u.has_active_ticket).length;
+  const needsCounsellor = users.filter(u => u.needs_counsellor).length;
 
   return (
     <div className="stats-grid">
@@ -682,10 +782,10 @@ const StatsCards = ({ users }) => {
         </div>
       </div>
       <div className="stat-card stat-counsellor">
-        <div className="stat-icon">🎫</div>
+        <div className="stat-icon">📞</div>
         <div className="stat-content">
-          <div className="stat-number">{withActiveTickets}</div>
-          <div className="stat-label">Active Tickets</div>
+          <div className="stat-number">{needsCounsellor}</div>
+          <div className="stat-label">Need Counsellor</div>
         </div>
       </div>
     </div>
@@ -960,12 +1060,14 @@ const FeedbacksView = () => {
 
       <div className="feedback-count-bar">
         <span>📊 Total Feedbacks: <strong>{feedbacks.length}</strong></span>
+        <button className="btn btn-refresh" onClick={fetchFeedbacks}>🔄 Refresh</button>
       </div>
 
       <div className="feedbacks-list">
         {feedbacks.length === 0 ? (
           <div className="no-data-card">
             <p>No feedbacks recorded yet</p>
+            <small>Feedbacks are captured when users click "Provide feedback" and send their message.</small>
           </div>
         ) : (
           feedbacks.map((feedback, idx) => (
@@ -1232,23 +1334,23 @@ function App() {
   const [userModal, setUserModal] = useState({ isOpen: false, userId: null });
 
   // Fetch data
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const res = await fetch(`${API_URL}/api/users`);
-        const data = await res.json();
-        setUsers(data.users || []);
-        setError(null);
-      } catch (err) {
-        setError('Failed to fetch data. Make sure backend is running.');
-        console.error(err);
-      }
-      setLoading(false);
-    };
-
-    fetchData();
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/api/users`);
+      const data = await res.json();
+      setUsers(data.users || []);
+      setError(null);
+    } catch (err) {
+      setError('Failed to fetch data. Make sure backend is running.');
+      console.error(err);
+    }
+    setLoading(false);
   }, []);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   // Filter users
   const filteredUsers = users.filter(user => {
@@ -1300,15 +1402,15 @@ function App() {
 
   // Download CSV
   const downloadCSV = () => {
-    const headers = ['Name', 'Email', 'Phone', 'Participation', 'Active Ticket', 'Total Tickets', 'Course Interest', 'First Seen', 'Last Active'];
+    const headers = ['Name', 'Email', 'Phone', 'Participation', 'Needs Counsellor', 'Counsellor Query', 'Course Interest', 'First Seen', 'Last Active'];
     const rows = filteredUsers.map(user => {
       return [
         user.name || '-',
         user.email || '-',
         user.phone_number || '-',
         user.participation_level || '-',
-        user.has_active_ticket ? 'Yes' : 'No',
-        user.total_tickets || 0,
+        user.needs_counsellor ? 'Yes' : 'No',
+        user.counsellor_query || '-',
         (user.course_interests || []).join(', ') || '-',
         formatDate(user.first_seen),
         formatDate(user.last_interaction)
@@ -1381,8 +1483,7 @@ function App() {
                 <th>Email</th>
                 <th>Phone</th>
                 <th>Participation</th>
-                <th>Active Ticket</th>
-                <th>Total Tickets</th>
+                <th>Need Counsellor</th>
                 <th>Course Interest</th>
                 <th>First Seen</th>
                 <th>Last Active</th>
@@ -1391,7 +1492,7 @@ function App() {
             <tbody>
               {filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan="9" className="no-data">No leads found</td>
+                  <td colSpan="8" className="no-data">No leads found</td>
                 </tr>
               ) : (
                 filteredUsers.map(user => (
@@ -1433,13 +1534,13 @@ function App() {
                       </span>
                     </td>
                     <td>
-                      {user.has_active_ticket ? (
-                        <span className="badge badge-warning">🎫 Yes</span>
-                      ) : (
-                        <span className="dot">•</span>
-                      )}
+                      <CounsellorQueryBadge 
+                        query={user.counsellor_query}
+                        requestedAt={user.counsellor_requested_at}
+                        userId={user.id}
+                        onMarkDone={fetchData}
+                      />
                     </td>
-                    <td>{user.total_tickets || 0}</td>
                     <td>
                       {(user.course_interests || []).length > 0 ? (
                         <div className="course-tags">
@@ -1508,7 +1609,7 @@ function App() {
             />
           </div>
           
-          <button className="btn btn-refresh" onClick={() => window.location.reload()}>
+          <button className="btn btn-refresh" onClick={fetchData}>
             🔄 Refresh
           </button>
         </div>
@@ -1524,7 +1625,7 @@ function App() {
 
       {/* Footer */}
       <footer className="footer">
-        <p>Last updated: {new Date().toLocaleString('en-IN')} | Iron Lady WATI Analytics v5.0.0 - Ticket System</p>
+        <p>Last updated: {new Date().toLocaleString('en-IN')} | Iron Lady WATI Analytics v5.1.0</p>
       </footer>
 
       {/* Modals */}
@@ -1538,3 +1639,159 @@ function App() {
 }
 
 export default App;
+
+/* 
+  Additional CSS to add to App.css for the new components:
+
+  .counsellor-query-badge-container {
+    position: relative;
+    display: inline-block;
+  }
+
+  .counsellor-query-icon {
+    cursor: pointer;
+    font-size: 1.2rem;
+    padding: 0.25rem;
+    border-radius: 6px;
+    background: linear-gradient(135deg, #fff3cd, #ffeeba);
+    transition: transform 0.2s ease;
+  }
+
+  .counsellor-query-icon:hover {
+    transform: scale(1.1);
+  }
+
+  .counsellor-tooltip {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    min-width: 300px;
+    max-width: 400px;
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 12px;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+    z-index: 1000;
+    margin-bottom: 10px;
+    animation: fadeIn 0.2s ease;
+  }
+
+  .counsellor-tooltip::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 8px solid transparent;
+    border-top-color: white;
+  }
+
+  .tooltip-header {
+    background: linear-gradient(135deg, #8B0000, #c41e3a);
+    color: white;
+    padding: 0.75rem 1rem;
+    border-radius: 12px 12px 0 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .tooltip-date {
+    font-size: 0.75rem;
+    opacity: 0.9;
+  }
+
+  .tooltip-content {
+    padding: 1rem;
+  }
+
+  .tooltip-query {
+    margin: 0;
+    color: #333;
+    line-height: 1.5;
+    background: #f8f9fa;
+    padding: 0.75rem;
+    border-radius: 8px;
+    border-left: 3px solid #8B0000;
+  }
+
+  .tooltip-actions {
+    padding: 0.75rem 1rem;
+    border-top: 1px solid #e0e0e0;
+    text-align: right;
+  }
+
+  .btn-sm {
+    padding: 0.4rem 0.8rem;
+    font-size: 0.8rem;
+  }
+
+  // User modal improvements
+  .detail-card-full {
+    grid-column: 1 / -1;
+  }
+
+  .counsellor-query-detail {
+    background: linear-gradient(135deg, #fff3cd, #ffeeba);
+    padding: 1rem;
+    border-radius: 8px;
+    border-left: 4px solid #ffc107;
+  }
+
+  .counsellor-query-detail p {
+    margin: 0 0 0.5rem 0;
+    color: #333;
+    line-height: 1.5;
+  }
+
+  .query-date {
+    font-size: 0.8rem;
+    color: #666;
+  }
+
+  .feedbacks-mini-list,
+  .tickets-mini-list {
+    max-height: 200px;
+    overflow-y: auto;
+  }
+
+  .feedback-mini-item {
+    padding: 0.75rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+    margin-bottom: 0.5rem;
+    border-left: 3px solid #8B0000;
+  }
+
+  .feedback-mini-item p {
+    margin: 0 0 0.25rem 0;
+    color: #333;
+  }
+
+  .feedback-mini-date {
+    font-size: 0.75rem;
+    color: #888;
+  }
+
+  .ticket-mini-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem;
+    background: #f8f9fa;
+    border-radius: 6px;
+    margin-bottom: 0.5rem;
+  }
+
+  .ticket-mini-number {
+    font-weight: 600;
+    color: #8B0000;
+  }
+
+  .ticket-mini-date {
+    margin-left: auto;
+    font-size: 0.75rem;
+    color: #888;
+  }
+*/
