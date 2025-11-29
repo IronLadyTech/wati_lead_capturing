@@ -3,25 +3,24 @@ Iron Lady WATI Analytics - Complete Backend with Ticket System
 FastAPI server with WATI webhook receiver, ticket management, and counsellor reply system
 
 Author: Iron Lady Tech Team
-Version: 6.1.0 - Optimized for Production (AWS Ready)
+Version: 7.0.0 - Final Production Ready
 """
 
 import json
 import re
 import os
 import requests
+import hashlib
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from typing import Optional, List
-from enum import Enum
 
-from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, Depends, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, ForeignKey, Boolean, Text, func, Enum as SQLEnum
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, ForeignKey, Boolean, Text, func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session, relationship
-import enum
 
 # ============================================
 # LOAD ENVIRONMENT VARIABLES
@@ -41,9 +40,48 @@ DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localho
 API_HOST = os.getenv("API_HOST", "0.0.0.0")
 API_PORT = int(os.getenv("API_PORT", "8000"))
 
-# WATI Configuration
 WATI_API_URL = os.getenv("WATI_SERVER", "https://live-server-113236.wati.io")
 WATI_API_TOKEN = os.getenv("WATI_API_TOKEN", "")
+WATI_TIMEOUT = 15
+
+# ============================================
+# DUPLICATE PREVENTION CACHE
+# ============================================
+
+PROCESSED_MESSAGE_IDS = set()
+LAST_SENT_MESSAGES = {}  # phone -> {hash, time}
+
+def is_duplicate_webhook(message_id: str) -> bool:
+    """Check if webhook already processed"""
+    if not message_id:
+        return False
+    if message_id in PROCESSED_MESSAGE_IDS:
+        return True
+    # Keep cache size manageable
+    if len(PROCESSED_MESSAGE_IDS) > 5000:
+        PROCESSED_MESSAGE_IDS.clear()
+    PROCESSED_MESSAGE_IDS.add(message_id)
+    return False
+
+def can_send_message(phone: str, message: str) -> bool:
+    """Check if we can send this message (prevent duplicates within 60 seconds)"""
+    msg_hash = hashlib.md5(message.encode()).hexdigest()
+    now = datetime.utcnow()
+    
+    if phone in LAST_SENT_MESSAGES:
+        last = LAST_SENT_MESSAGES[phone]
+        if last["hash"] == msg_hash:
+            time_diff = (now - last["time"]).total_seconds()
+            if time_diff < 60:
+                return False
+    
+    LAST_SENT_MESSAGES[phone] = {"hash": msg_hash, "time": now}
+    
+    # Clean old entries
+    if len(LAST_SENT_MESSAGES) > 1000:
+        LAST_SENT_MESSAGES.clear()
+    
+    return True
 
 # ============================================
 # DATABASE SETUP
@@ -64,16 +102,11 @@ Base = declarative_base()
 # ============================================
 
 def convert_to_ist(utc_dt):
-    """Convert UTC datetime to IST (Indian Standard Time)"""
     if utc_dt is None:
         return None
     if utc_dt.tzinfo is None:
         utc_dt = utc_dt.replace(tzinfo=ZoneInfo("UTC"))
     return utc_dt.astimezone(ZoneInfo("Asia/Kolkata")).isoformat()
-
-def get_ist_now():
-    """Get current time in IST"""
-    return datetime.now(ZoneInfo("Asia/Kolkata"))
 
 # ============================================
 # DATABASE MODELS
@@ -129,7 +162,7 @@ class TicketMessage(Base):
     message_text = Column(Text, nullable=True)
     media_url = Column(String(500), nullable=True)
     media_filename = Column(String(200), nullable=True)
-    wati_message_id = Column(String(100), nullable=True)
+    wati_message_id = Column(String(100), nullable=True, index=True)
     delivery_status = Column(String(20), default="sent")
     sent_by = Column(String(100), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -202,6 +235,7 @@ class WebhookLog(Base):
     id = Column(Integer, primary_key=True, index=True)
     event_type = Column(String(50))
     phone_number = Column(String(20), nullable=True)
+    message_id = Column(String(100), nullable=True, index=True)
     is_outgoing = Column(Boolean, default=False)
     raw_data = Column(Text)
     processed = Column(Boolean, default=False)
@@ -214,7 +248,6 @@ class WebhookLog(Base):
 # ============================================
 
 def init_database():
-    """Initialize database safely"""
     from sqlalchemy import inspect, text
     
     print("🔄 Initializing database...")
@@ -225,6 +258,7 @@ def init_database():
         ("users", "enrolled_program", "VARCHAR(100)"),
         ("users", "participation_level", "VARCHAR(50) DEFAULT 'Unknown'"),
         ("users", "awaiting_ticket_type", "VARCHAR(30)"),
+        ("webhook_logs", "message_id", "VARCHAR(100)"),
     ]
     
     try:
@@ -254,8 +288,8 @@ init_database()
 
 app = FastAPI(
     title="Iron Lady WATI Analytics API",
-    description="Complete analytics backend with ticket system and counsellor replies",
-    version="6.1.0",
+    description="Complete analytics backend with ticket system",
+    version="7.0.0",
     docs_url="/docs",
     redoc_url="/redoc"
 )
@@ -292,19 +326,19 @@ class TicketStatusUpdateRequest(BaseModel):
     resolved_by: Optional[str] = None
     resolution_notes: Optional[str] = None
 
-class BroadcastMarkResentRequest(BaseModel):
-    manually_sent_by: Optional[str] = "Dashboard User"
-
 # ============================================
-# WATI API HELPER FUNCTIONS (Optimized - reduced timeouts)
+# WATI API FUNCTIONS
 # ============================================
-
-WATI_TIMEOUT = 10  # Reduced from 30 seconds
 
 def send_wati_message(phone_number: str, message: str) -> dict:
     """Send a text message via WATI API"""
     if not WATI_API_TOKEN:
         return {"success": False, "error": "WATI API token not configured"}
+    
+    # Check for duplicate
+    if not can_send_message(phone_number, message):
+        print(f"⚠️ Skipping duplicate message to {phone_number}")
+        return {"success": True, "skipped": True}
     
     phone = phone_number.replace("+", "").replace(" ", "").strip()
     url = f"{WATI_API_URL}/api/v1/sendSessionMessage/{phone}?messageText={requests.utils.quote(message)}"
@@ -318,13 +352,16 @@ def send_wati_message(phone_number: str, message: str) -> dict:
         response = requests.post(url, headers=headers, timeout=WATI_TIMEOUT)
         result = response.json()
         
-        if response.status_code == 200 and result.get("result"):
-            return {
-                "success": True,
-                "message_id": result.get("messageId") or result.get("id"),
-                "response": result
-            }
-        return {"success": False, "error": result.get("message") or "Unknown error", "response": result}
+        # Check for success - multiple possible indicators
+        if response.status_code == 200:
+            if result.get("result") == True:
+                return {"success": True, "message_id": result.get("messageId"), "response": result}
+            if result.get("whatsappMessageId"):
+                return {"success": True, "message_id": result.get("whatsappMessageId"), "response": result}
+            if result.get("statusString") == "SENT":
+                return {"success": True, "message_id": result.get("whatsappMessageId") or result.get("localMessageId"), "response": result}
+        
+        return {"success": False, "error": result.get("message") or str(result), "response": result}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
@@ -342,34 +379,54 @@ def send_wati_interactive_buttons(phone_number: str, body_text: str, buttons: li
         "Content-Type": "application/json-patch+json"
     }
     
-    payload = {
-        "body": body_text,
-        "buttons": [{"text": btn["text"]} for btn in buttons]
-    }
+    payload = {"body": body_text, "buttons": [{"text": btn["text"]} for btn in buttons]}
     
     try:
         response = requests.post(url, headers=headers, json=payload, timeout=WATI_TIMEOUT)
         result = response.json()
         
-        is_success = (
-            response.status_code == 200 and 
-            (result.get("result") == True or 
-             result.get("statusString") == "SENT" or
-             result.get("whatsappMessageId") is not None)
-        )
+        print(f"📤 WATI Response Status: {response.status_code}")
         
-        if is_success:
-            return {
-                "success": True,
-                "message_id": result.get("messageId") or result.get("whatsappMessageId") or result.get("id"),
-                "response": result
-            }
-        return {"success": False, "error": result.get("message") or "Unknown error", "response": result}
+        if response.status_code == 200 and isinstance(result, dict):
+            
+            # WATI Response Format: {"ok": true, "errors": null, "message": {...}}
+            # The actual message data is INSIDE the "message" key
+            
+            ok_status = result.get("ok")
+            message_data = result.get("message")
+            
+            # Check if ok is True - this is the primary success indicator
+            if ok_status == True:
+                # Extract message ID from nested message object
+                msg_id = None
+                if isinstance(message_data, dict):
+                    msg_id = message_data.get("whatsappMessageId") or message_data.get("localMessageId") or message_data.get("id")
+                
+                print(f"✅ Message sent successfully: {msg_id}")
+                return {"success": True, "message_id": msg_id, "response": result}
+            
+            # Fallback: check top-level fields (older API format)
+            wamid = result.get("whatsappMessageId")
+            status_str = result.get("statusString")
+            result_bool = result.get("result")
+            
+            if wamid or status_str == "SENT" or result_bool == True:
+                final_id = wamid or result.get("localMessageId") or result.get("messageId")
+                print(f"✅ Message sent successfully: {final_id}")
+                return {"success": True, "message_id": final_id, "response": result}
+        
+        # If we got here, something went wrong
+        errors = result.get("errors") if isinstance(result, dict) else None
+        error_msg = str(errors) if errors else "Unknown error"
+        print(f"❌ WATI Error: {error_msg}")
+        return {"success": False, "error": error_msg, "response": result}
+        
     except Exception as e:
+        print(f"❌ Exception: {e}")
         return {"success": False, "error": str(e)}
 
 
-def send_wati_media(phone_number: str, media_url: str, caption: str = "", media_type: str = "image") -> dict:
+def send_wati_media(phone_number: str, media_url: str, caption: str = "") -> dict:
     """Send media via WATI API"""
     if not WATI_API_TOKEN:
         return {"success": False, "error": "WATI API token not configured"}
@@ -377,17 +434,14 @@ def send_wati_media(phone_number: str, media_url: str, caption: str = "", media_
     phone = phone_number.replace("+", "").replace(" ", "").strip()
     url = f"{WATI_API_URL}/api/v1/sendSessionFile/{phone}"
     
-    headers = {
-        "Authorization": f"Bearer {WATI_API_TOKEN}",
-        "Content-Type": "application/json"
-    }
+    headers = {"Authorization": f"Bearer {WATI_API_TOKEN}", "Content-Type": "application/json"}
     
     try:
         response = requests.post(url, headers=headers, json={"url": media_url, "caption": caption}, timeout=WATI_TIMEOUT)
         result = response.json()
         
-        if response.status_code == 200 and result.get("result"):
-            return {"success": True, "message_id": result.get("messageId") or result.get("id"), "response": result}
+        if response.status_code == 200 and (result.get("result") or result.get("whatsappMessageId")):
+            return {"success": True, "message_id": result.get("whatsappMessageId") or result.get("messageId"), "response": result}
         return {"success": False, "error": result.get("message") or "Unknown error", "response": result}
     except Exception as e:
         return {"success": False, "error": str(e)}
@@ -401,18 +455,12 @@ def assign_to_operator(phone_number: str, operator_email: str = "Admin@iamironla
     phone = phone_number.replace("+", "").replace(" ", "").strip()
     url = f"{WATI_API_URL}/api/v1/assignOperator?whatsappNumber={phone}&operatorEmail={operator_email}"
     
-    headers = {
-        "Authorization": f"Bearer {WATI_API_TOKEN}",
-        "Content-Type": "application/json-patch+json"
-    }
+    headers = {"Authorization": f"Bearer {WATI_API_TOKEN}", "Content-Type": "application/json-patch+json"}
     
     try:
         response = requests.post(url, headers=headers, timeout=WATI_TIMEOUT)
         result = response.json()
-        
-        if response.status_code == 200 and result.get("result"):
-            return {"success": True, "response": result}
-        return {"success": False, "error": result.get("message") or "Unknown error", "response": result}
+        return {"success": response.status_code == 200, "response": result}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
@@ -425,28 +473,21 @@ def unassign_operator(phone_number: str) -> dict:
     phone = phone_number.replace("+", "").replace(" ", "").strip()
     url = f"{WATI_API_URL}/api/v1/unassignOperator?whatsappNumber={phone}"
     
-    headers = {
-        "Authorization": f"Bearer {WATI_API_TOKEN}",
-        "Content-Type": "application/json-patch+json"
-    }
+    headers = {"Authorization": f"Bearer {WATI_API_TOKEN}", "Content-Type": "application/json-patch+json"}
     
     try:
         response = requests.post(url, headers=headers, timeout=WATI_TIMEOUT)
         result = response.json()
-        
-        if response.status_code == 200 and result.get("result"):
-            return {"success": True, "response": result}
-        return {"success": False, "error": result.get("message") or "Unknown error", "response": result}
+        return {"success": response.status_code == 200, "response": result}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
 
 # ============================================
-# TICKET HELPER FUNCTIONS
+# HELPER FUNCTIONS
 # ============================================
 
 def generate_ticket_number(db: Session) -> str:
-    """Generate unique ticket number"""
     current_year = datetime.utcnow().year
     counter = db.query(TicketCounter).filter(TicketCounter.year == current_year).first()
     
@@ -459,13 +500,12 @@ def generate_ticket_number(db: Session) -> str:
     return f"TKT-{current_year}-{counter.last_number:04d}"
 
 
-def get_or_create_user(db: Session, phone_number: str, name: str = None, email: str = None) -> User:
-    """Get or create user"""
+def get_or_create_user(db: Session, phone_number: str, name: str = None) -> User:
     phone_number = phone_number.replace("+", "").replace(" ", "").strip()
     user = db.query(User).filter(User.phone_number == phone_number).first()
     
     if not user:
-        user = User(phone_number=phone_number, name=name, email=email, participation_level="Unknown")
+        user = User(phone_number=phone_number, name=name, participation_level="Unknown")
         db.add(user)
         db.commit()
         db.refresh(user)
@@ -473,14 +513,11 @@ def get_or_create_user(db: Session, phone_number: str, name: str = None, email: 
         user.last_interaction = datetime.utcnow()
         if name and not user.name:
             user.name = name
-        if email and not user.email:
-            user.email = email
         db.commit()
     return user
 
 
-def get_active_ticket_for_user(db: Session, phone_number: str) -> Optional[Ticket]:
-    """Get active ticket for user"""
+def get_active_ticket(db: Session, phone_number: str) -> Optional[Ticket]:
     phone_number = phone_number.replace("+", "").replace(" ", "").strip()
     user = db.query(User).filter(User.phone_number == phone_number).first()
     if not user:
@@ -492,60 +529,60 @@ def get_active_ticket_for_user(db: Session, phone_number: str) -> Optional[Ticke
     ).order_by(Ticket.created_at.desc()).first()
 
 
-def update_course_interest(db: Session, user_id: int, course_name: str):
-    """Update course interest"""
-    interest = db.query(CourseInterest).filter(
-        CourseInterest.user_id == user_id,
-        CourseInterest.course_name == course_name
-    ).first()
-    
-    if interest:
-        interest.click_count += 1
-        interest.last_clicked = datetime.utcnow()
-    else:
-        db.add(CourseInterest(user_id=user_id, course_name=course_name))
-    db.commit()
-
-
-def add_enrolled_program(user: User, program: str):
-    """Add enrolled program"""
-    if not user.enrolled_program:
-        user.enrolled_program = program
-    elif program not in user.enrolled_program:
-        user.enrolled_program = f"{user.enrolled_program},{program}"
-
-
 # ============================================
-# MESSAGE HELPERS
+# MESSAGE MATCHING
 # ============================================
 
-QUERY_BUTTONS = ["i have a query", "have a query", "query", "have query"]
-CONCERN_BUTTONS = ["raise a concern", "have a concern", "concern", "raise concern"]
+QUERY_BUTTONS = ["i have a query", "have a query", "query"]
+CONCERN_BUTTONS = ["raise a concern", "have a concern", "concern"]
 
-SATISFACTION_YES_RESPONSES = {"yes, resolved", "yes,resolved", "yes resolved", "resolved", "yes"}
-SATISFACTION_NO_RESPONSES = {"need more help", "needmorehelp", "need help", "more help", "no"}
+# EXACT button texts from WATI
+SATISFACTION_YES = ["yes, resolved", "yes,resolved"]
+SATISFACTION_NO = ["need more help", "needmorehelp"]
 
-CHATBOT_BUTTONS = [
+# Chatbot flow messages - DO NOT respond to these
+CHATBOT_MESSAGES = [
     "new to platform", "enrolled participant", "more options",
-    "lep", "100bm", "mbw", "masterclass", "leadership essentials",
-    "100 board members", "master of business warfare", "know more",
-    "ask a question", "feedback"
+    "please choose your participation", "ask a question here",
+    "lep", "100bm", "mbw", "masterclass", "know more", "feedback"
 ]
 
-IGNORE_MESSAGES = {
-    "hi", "hello", "hey", "hii", "hiii", "helloo", "hellooo",
-    "good morning", "good night", "good evening", "gm", "gn",
-    "morning", "night", "evening", "bye", "byee", "goodbye",
-    "thanks", "thank you", "thankyou", "thnx", "thx", "ty",
-    "ok", "okay", "k", "oky", "yes", "no", "ya", "yep", "nope", "yup",
-    "hmm", "hm", "mm", "cool", "nice", "great", "awesome", "sure",
-    "alright", "fine", "good", "bad", "np"
-}
+IGNORE_MESSAGES = [
+    "hi", "hello", "hey", "ok", "okay", "thanks", "thank you",
+    "bye", "good morning", "good night", "hmm", "yes", "no"
+]
 
 
-def should_ignore_message(message: str) -> bool:
-    message_lower = message.lower().strip()
-    return message_lower in IGNORE_MESSAGES or len(message.strip()) < 3
+def get_message_type(message: str) -> str:
+    """Determine the type of message"""
+    msg = message.lower().strip()
+    
+    # Check satisfaction buttons FIRST (exact match)
+    if msg in SATISFACTION_YES or "yes, resolved" in msg:
+        return "satisfaction_yes"
+    
+    if msg in SATISFACTION_NO or "need more help" in msg:
+        return "satisfaction_no"
+    
+    # Check query/concern buttons
+    for btn in QUERY_BUTTONS:
+        if btn in msg:
+            return "query_button"
+    
+    for btn in CONCERN_BUTTONS:
+        if btn in msg:
+            return "concern_button"
+    
+    # Check chatbot messages
+    for cb in CHATBOT_MESSAGES:
+        if cb in msg:
+            return "chatbot_flow"
+    
+    # Check ignore messages
+    if msg in IGNORE_MESSAGES or len(msg) < 3:
+        return "ignore"
+    
+    return "regular"
 
 
 def extract_email(text: str) -> Optional[str]:
@@ -554,363 +591,312 @@ def extract_email(text: str) -> Optional[str]:
     return match.group() if match else None
 
 
-def is_satisfaction_response(message: str) -> Optional[bool]:
-    """Check satisfaction response"""
-    message_lower = message.lower().strip()
-    
-    if message_lower in SATISFACTION_YES_RESPONSES:
-        return True
-    elif message_lower in SATISFACTION_NO_RESPONSES:
-        return False
-    
-    # Partial match
-    for yes_response in SATISFACTION_YES_RESPONSES:
-        if yes_response in message_lower or message_lower in yes_response:
-            return True
-    
-    for no_response in SATISFACTION_NO_RESPONSES:
-        if no_response in message_lower or message_lower in no_response:
-            return False
-    
-    return None
-
-
 # ============================================
-# WEBHOOK ENDPOINT - OPTIMIZED
+# WEBHOOK ENDPOINT
 # ============================================
 
 @app.post("/webhook/wati")
 async def wati_webhook(data: dict, db: Session = Depends(get_db)):
-    """WATI Webhook Receiver - v6.1.0 Optimized"""
+    """WATI Webhook - v7.0.0 Final"""
     
+    # Extract data
     wa_number = data.get("waId") or data.get("waNumber") or ""
     sender_name = data.get("senderName", "").replace("~", "").strip() or None
     event_type = data.get("eventType", "")
     message_text = data.get("text", "") or ""
-    message_id = data.get("id") or data.get("messageId")
+    message_id = data.get("id") or data.get("messageId") or ""
     
-    # Extract button text from various WATI formats
+    # Extract button text
     button_text = data.get("buttonText") or data.get("listResponseTitle") or ""
     
     if not button_text:
-        button_obj = data.get("button")
-        if isinstance(button_obj, dict):
-            button_text = button_obj.get("text", "")
-    
-    if not button_text:
-        interactive_obj = data.get("interactive")
-        if isinstance(interactive_obj, dict):
-            button_reply = interactive_obj.get("button_reply")
-            if isinstance(button_reply, dict):
-                button_text = button_reply.get("title", "")
-    
-    if not button_text:
-        list_reply = data.get("listReply")
-        if isinstance(list_reply, dict):
-            button_text = list_reply.get("title", "")
-    
-    if not button_text:
-        button_reply = data.get("buttonReply")
-        if isinstance(button_reply, dict):
-            button_text = button_reply.get("title", "")
+        for key in ["button", "interactive", "listReply", "buttonReply"]:
+            obj = data.get(key)
+            if isinstance(obj, dict):
+                button_text = obj.get("text") or obj.get("title") or ""
+                if not button_text and key == "interactive":
+                    br = obj.get("button_reply")
+                    if isinstance(br, dict):
+                        button_text = br.get("title", "")
+                if button_text:
+                    break
     
     if button_text:
         message_text = button_text
     
-    message_lower = message_text.lower().strip()
-    
+    # Check if outgoing
     is_outgoing = (
-        data.get("owner", False) == True or 
-        data.get("isFromMe", False) == True or
-        data.get("fromMe", False) == True or
+        data.get("owner") == True or 
+        data.get("isFromMe") == True or
+        data.get("fromMe") == True or
         str(data.get("owner", "")).lower() == "true" or
+        str(data.get("isOwner", "")).lower() == "true" or
         event_type in ["sessionMessageSent", "session_message_sent", "message_sent"]
     )
     
-    # Create webhook log
+    # ========================================
+    # DUPLICATE CHECK
+    # ========================================
+    if message_id and is_duplicate_webhook(message_id):
+        return {"status": "duplicate"}
+    
+    # Log webhook
     log = WebhookLog(
         event_type=event_type,
         phone_number=wa_number,
+        message_id=message_id,
         is_outgoing=is_outgoing,
-        raw_data=json.dumps(data),
-        processed=False,
-        action_taken=None
+        raw_data=json.dumps(data)[:5000],
+        processed=False
     )
     db.add(log)
     db.commit()
     
     try:
-        # Handle status updates
-        if event_type in ["templateMessageFailed", "sentMessageDELIVERED", "sentMessageREAD", "sent", "delivered", "read", "failed"]:
-            if message_id:
-                ticket_msg = db.query(TicketMessage).filter(TicketMessage.wati_message_id == message_id).first()
-                if ticket_msg:
-                    if event_type in ["sentMessageDELIVERED", "delivered"]:
-                        ticket_msg.delivery_status = "delivered"
-                        ticket_msg.delivered_at = datetime.utcnow()
-                    elif event_type in ["sentMessageREAD", "read"]:
-                        ticket_msg.delivery_status = "read"
-                        ticket_msg.read_at = datetime.utcnow()
-                    elif event_type in ["templateMessageFailed", "failed"]:
-                        ticket_msg.delivery_status = "failed"
-                    db.commit()
-                    log.action_taken = f"ticket_message_{event_type}"
-                    log.processed = True
-                    db.commit()
-                    return {"status": "processed", "action": log.action_taken}
-                
-                broadcast = db.query(BroadcastMessage).filter(BroadcastMessage.wati_message_id == message_id).first()
-                if broadcast:
-                    if event_type in ["sentMessageDELIVERED", "delivered"]:
-                        broadcast.status = "delivered"
-                        broadcast.delivered_at = datetime.utcnow()
-                    elif event_type in ["sentMessageREAD", "read"]:
-                        broadcast.status = "read"
-                        broadcast.read_at = datetime.utcnow()
-                    elif event_type in ["templateMessageFailed", "failed"]:
-                        broadcast.status = "failed"
-                        broadcast.failed_at = datetime.utcnow()
-                        broadcast.failure_reason = data.get("failedDetail") or data.get("errorMessage") or "Unknown"
-                    db.commit()
-                    log.action_taken = f"broadcast_{event_type}"
-                    log.processed = True
-                    db.commit()
-                    return {"status": "processed", "action": log.action_taken}
-        
-        if not wa_number:
-            log.action_taken = "ignored_no_phone"
+        # ========================================
+        # IGNORE: Status updates
+        # ========================================
+        if event_type in ["sentMessageDELIVERED", "sentMessageREAD", "delivered", "read", "failed"]:
+            log.action_taken = "status_update"
             log.processed = True
             db.commit()
-            return {"status": "ignored", "reason": "No phone number"}
+            return {"status": "ok"}
+        
+        # ========================================
+        # IGNORE: No phone or outgoing
+        # ========================================
+        if not wa_number:
+            log.action_taken = "no_phone"
+            log.processed = True
+            db.commit()
+            return {"status": "ignored"}
         
         wa_number = wa_number.replace("+", "").replace(" ", "")
         
-        # Handle outgoing messages
-        if is_outgoing and message_text:
-            user = get_or_create_user(db, wa_number, name=sender_name)
-            
-            if "thrilled to inform" in message_lower and "registration" in message_lower:
-                user.participation_level = "Enrolled Participant"
-                if "leadership essentials" in message_lower:
-                    add_enrolled_program(user, "LEP")
-                elif "100 board" in message_lower:
-                    add_enrolled_program(user, "100BM")
-                elif "business warfare" in message_lower or "mbw" in message_lower:
-                    add_enrolled_program(user, "MBW")
-                elif "masterclass" in message_lower:
-                    add_enrolled_program(user, "Masterclass")
-                db.commit()
-            
-            if "leadership essentials program enables you to master" in message_lower:
-                update_course_interest(db, user.id, "LEP")
-            elif "100 board members program enables you to focus" in message_lower:
-                update_course_interest(db, user.id, "100BM")
-            elif "master of business warfare focuses on winning" in message_lower:
-                update_course_interest(db, user.id, "MBW")
-            elif "iron lady leadership masterclass helps you" in message_lower:
-                update_course_interest(db, user.id, "Masterclass")
-            
-            if "welcome to the iron lady platform" in message_lower:
-                user.participation_level = "New to platform"
-                db.commit()
-            
-            if "ask a question here" in message_lower:
-                user.participation_level = "Enrolled Participant"
-                db.commit()
-            
+        if is_outgoing:
+            log.action_taken = "outgoing"
             log.processed = True
             db.commit()
-            return {"status": "processed", "action": "bot_message_logged"}
+            return {"status": "ignored"}
         
-        # Handle incoming messages
-        if not is_outgoing and message_text:
-            user = get_or_create_user(db, wa_number, name=sender_name)
-            active_ticket = get_active_ticket_for_user(db, wa_number)
+        if not message_text:
+            log.action_taken = "no_text"
+            log.processed = True
+            db.commit()
+            return {"status": "ignored"}
+        
+        # ========================================
+        # PROCESS INCOMING MESSAGE
+        # ========================================
+        user = get_or_create_user(db, wa_number, sender_name)
+        active_ticket = get_active_ticket(db, wa_number)
+        msg_type = get_message_type(message_text)
+        
+        print(f"📨 [{wa_number}] Type: {msg_type} | Text: {message_text[:50]}...")
+        
+        # ----------------------------------------
+        # CHATBOT FLOW - Don't respond
+        # ----------------------------------------
+        if msg_type == "chatbot_flow":
+            log.action_taken = "chatbot_flow"
+            log.processed = True
+            db.commit()
+            return {"status": "chatbot"}
+        
+        # ----------------------------------------
+        # IGNORE casual messages (when no ticket)
+        # ----------------------------------------
+        if msg_type == "ignore" and not active_ticket:
+            log.action_taken = "ignored"
+            log.processed = True
+            db.commit()
+            return {"status": "ignored"}
+        
+        # ----------------------------------------
+        # QUERY BUTTON
+        # ----------------------------------------
+        if msg_type == "query_button":
+            user.awaiting_ticket_type = "query"
+            db.commit()
+            log.action_taken = "awaiting_query"
+            log.processed = True
+            db.commit()
+            return {"status": "awaiting_query"}
+        
+        # ----------------------------------------
+        # CONCERN BUTTON
+        # ----------------------------------------
+        if msg_type == "concern_button":
+            user.awaiting_ticket_type = "concern"
+            db.commit()
+            log.action_taken = "awaiting_concern"
+            log.processed = True
+            db.commit()
+            return {"status": "awaiting_concern"}
+        
+        # ----------------------------------------
+        # CREATE TICKET (user was awaiting)
+        # ----------------------------------------
+        if user.awaiting_ticket_type in ["query", "concern"]:
+            category = user.awaiting_ticket_type
+            ticket_number = generate_ticket_number(db)
             
-            # Check Query/Concern buttons
-            if any(btn in message_lower for btn in QUERY_BUTTONS):
-                user.awaiting_ticket_type = "query"
-                db.commit()
-                log.action_taken = "set_awaiting_query"
-                log.processed = True
-                db.commit()
-                return {"status": "awaiting_query"}
+            ticket = Ticket(
+                ticket_number=ticket_number,
+                user_id=user.id,
+                category=category,
+                initial_message=message_text,
+                status="pending",
+                last_user_message_at=datetime.utcnow()
+            )
+            db.add(ticket)
+            db.commit()
+            db.refresh(ticket)
             
-            if any(btn in message_lower for btn in CONCERN_BUTTONS):
-                user.awaiting_ticket_type = "concern"
-                db.commit()
-                log.action_taken = "set_awaiting_concern"
-                log.processed = True
-                db.commit()
-                return {"status": "awaiting_concern"}
+            db.add(TicketMessage(
+                ticket_id=ticket.id,
+                direction="incoming",
+                message_type="text",
+                message_text=message_text,
+                wati_message_id=message_id,
+                sent_by=sender_name
+            ))
             
-            # Create ticket if awaiting
-            if user.awaiting_ticket_type in ["query", "concern"]:
-                category = user.awaiting_ticket_type
-                ticket_number = generate_ticket_number(db)
-                
-                ticket = Ticket(
-                    ticket_number=ticket_number,
-                    user_id=user.id,
-                    category=category,
-                    initial_message=message_text,
-                    status="pending",
-                    last_user_message_at=datetime.utcnow()
-                )
-                db.add(ticket)
-                db.commit()
-                db.refresh(ticket)
-                
-                db.add(TicketMessage(
-                    ticket_id=ticket.id,
-                    direction="incoming",
-                    message_type="text",
-                    message_text=message_text,
-                    sent_by=sender_name
-                ))
-                
-                user.awaiting_ticket_type = None
-                user.has_active_ticket = True
-                db.commit()
-                
-                # Assign to operator and send confirmation
-                assign_to_operator(wa_number)
-                send_wati_message(wa_number, f"✅ Your ticket {ticket_number} has been created for this {category}.\n\nOur counsellor will reach out to you within the next 24 hours.\n\nThank you for your patience! 🙏")
-                
-                log.action_taken = f"ticket_created_{ticket_number}"
-                log.processed = True
-                db.commit()
-                return {"status": "ticket_created", "ticket_number": ticket_number, "category": category}
+            user.awaiting_ticket_type = None
+            user.has_active_ticket = True
+            db.commit()
             
-            # Handle active ticket responses
-            if active_ticket:
-                satisfaction = is_satisfaction_response(message_text)
+            # Assign to operator
+            assign_to_operator(wa_number)
+            
+            # Send confirmation
+            msg = f"✅ Your ticket {ticket_number} has been created for this {category}.\n\nOur counsellor will reach out to you within the next 24 hours.\n\nThank you for your patience!"
+            send_wati_message(wa_number, msg)
+            
+            log.action_taken = f"created_{ticket_number}"
+            log.processed = True
+            db.commit()
+            return {"status": "ticket_created", "ticket": ticket_number}
+        
+        # ----------------------------------------
+        # ACTIVE TICKET: Satisfaction YES
+        # ----------------------------------------
+        if active_ticket and msg_type == "satisfaction_yes":
+            active_ticket.status = "resolved"
+            active_ticket.resolved_at = datetime.utcnow()
+            user.has_active_ticket = False
+            db.commit()
+            
+            send_wati_message(wa_number, f"Thank you for confirming! Your ticket {active_ticket.ticket_number} has been resolved.\n\nWe're glad we could help!")
+            unassign_operator(wa_number)
+            
+            log.action_taken = f"resolved_{active_ticket.ticket_number}"
+            log.processed = True
+            db.commit()
+            return {"status": "resolved"}
+        
+        # ----------------------------------------
+        # ACTIVE TICKET: Satisfaction NO
+        # ----------------------------------------
+        if active_ticket and msg_type == "satisfaction_no":
+            # Only respond if not already awaiting
+            if active_ticket.status != "awaiting":
+                active_ticket.status = "awaiting"
+                active_ticket.last_user_message_at = datetime.utcnow()
+                db.commit()
                 
-                if satisfaction is True:
-                    active_ticket.status = "resolved"
-                    active_ticket.resolved_at = datetime.utcnow()
-                    user.has_active_ticket = False
-                    db.commit()
-                    
-                    send_wati_message(wa_number, f"Thank you for confirming! Your ticket {active_ticket.ticket_number} has been resolved.\n\nWe're glad we could help! 💪")
-                    unassign_operator(wa_number)
-                    
-                    log.action_taken = f"ticket_resolved_{active_ticket.ticket_number}"
-                    log.processed = True
-                    db.commit()
-                    return {"status": "ticket_resolved", "ticket_number": active_ticket.ticket_number}
-                
-                elif satisfaction is False:
-                    db.add(TicketMessage(
-                        ticket_id=active_ticket.id,
-                        direction="incoming",
-                        message_type="text",
-                        message_text="[User requested more help]",
-                        sent_by=sender_name
-                    ))
-                    active_ticket.last_user_message_at = datetime.utcnow()
-                    active_ticket.status = "awaiting"
-                    db.commit()
-                    
-                    send_wati_message(wa_number, "Please share what additional help you need:")
-                    
-                    log.action_taken = f"need_more_help_{active_ticket.ticket_number}"
-                    log.processed = True
-                    db.commit()
-                    return {"status": "need_more_help"}
-                
-                # Chatbot button - ignore
-                if any(btn in message_lower for btn in CHATBOT_BUTTONS):
-                    log.action_taken = f"chatbot_button_ignored"
-                    log.processed = True
-                    db.commit()
-                    return {"status": "chatbot_button_ignored"}
-                
-                # Follow-up message
                 db.add(TicketMessage(
                     ticket_id=active_ticket.id,
                     direction="incoming",
                     message_type="text",
-                    message_text=message_text,
-                    sent_by=sender_name
+                    message_text="[User needs more help]",
+                    wati_message_id=message_id
                 ))
-                active_ticket.last_user_message_at = datetime.utcnow()
+                db.commit()
                 
-                if active_ticket.status == "awaiting":
-                    active_ticket.status = "pending"
-                    db.commit()
-                    send_wati_message(wa_number, f"Your ticket {active_ticket.ticket_number} is still in progress. Our counsellor will reach you within 24 hours. 🙏")
-                    log.action_taken = f"ticket_followup_confirmed_{active_ticket.ticket_number}"
-                else:
-                    db.commit()
-                    log.action_taken = f"ticket_followup_silent_{active_ticket.ticket_number}"
-                
-                log.processed = True
-                db.commit()
-                return {"status": "followup_added", "ticket_number": active_ticket.ticket_number}
+                send_wati_message(wa_number, "Please share what additional help you need:")
             
-            # No ticket context
-            email = extract_email(message_text)
-            if email:
-                user.email = email
-                db.commit()
-                log.action_taken = "email_captured"
-                log.processed = True
-                db.commit()
-                return {"status": "processed", "action": "email_captured", "email": email}
-            
-            if should_ignore_message(message_text):
-                log.action_taken = "casual_ignored"
-                log.processed = True
-                db.commit()
-                return {"status": "processed", "action": "casual_ignored"}
-            
-            log.action_taken = "message_logged"
+            log.action_taken = f"need_help_{active_ticket.ticket_number}"
             log.processed = True
             db.commit()
-            return {"status": "processed", "action": "message_logged"}
+            return {"status": "need_more_help"}
         
+        # ----------------------------------------
+        # ACTIVE TICKET: Follow-up message
+        # ----------------------------------------
+        if active_ticket:
+            db.add(TicketMessage(
+                ticket_id=active_ticket.id,
+                direction="incoming",
+                message_type="text",
+                message_text=message_text,
+                wati_message_id=message_id,
+                sent_by=sender_name
+            ))
+            active_ticket.last_user_message_at = datetime.utcnow()
+            
+            # Only send confirmation if ticket was in "awaiting" status
+            if active_ticket.status == "awaiting":
+                active_ticket.status = "pending"
+                db.commit()
+                send_wati_message(wa_number, f"Your ticket {active_ticket.ticket_number} is still in progress. Our counsellor will reach you within 24 hours. 🙏")
+                log.action_taken = f"followup_{active_ticket.ticket_number}"
+            else:
+                db.commit()
+                log.action_taken = f"silent_{active_ticket.ticket_number}"
+            
+            log.processed = True
+            db.commit()
+            return {"status": "followup"}
+        
+        # ----------------------------------------
+        # NO TICKET: Check for email
+        # ----------------------------------------
+        email = extract_email(message_text)
+        if email:
+            user.email = email
+            db.commit()
+            log.action_taken = "email_captured"
+            log.processed = True
+            db.commit()
+            return {"status": "email_captured"}
+        
+        # ----------------------------------------
+        # DEFAULT: Just log
+        # ----------------------------------------
         log.action_taken = "logged"
         log.processed = True
         db.commit()
-        return {"status": "processed", "action": "logged"}
+        return {"status": "logged"}
     
     except Exception as e:
-        log.action_taken = f"error: {str(e)[:80]}"
+        log.action_taken = f"error:{str(e)[:50]}"
         log.processed = False
         db.commit()
+        print(f"❌ Error: {e}")
         return {"status": "error", "message": str(e)}
 
 
 # ============================================
-# ROOT & HEALTH ENDPOINTS
+# ROOT & HEALTH
 # ============================================
 
 @app.get("/")
 async def root():
-    return {
-        "name": "Iron Lady WATI Analytics API",
-        "version": "6.1.0",
-        "status": "running",
-        "features": ["ticket_system", "counsellor_replies", "conversation_tracking", "broadcast_tracking"],
-        "docs": "/docs"
-    }
+    return {"name": "Iron Lady WATI Analytics", "version": "7.0.0", "status": "running"}
 
 
 @app.get("/health")
 async def health_check(db: Session = Depends(get_db)):
     try:
-        user_count = db.query(User).count()
-        ticket_count = db.query(Ticket).count()
-        pending_tickets = db.query(Ticket).filter(Ticket.status == "pending").count()
         return {
             "status": "healthy",
             "database": "connected",
-            "total_users": user_count,
-            "total_tickets": ticket_count,
-            "pending_tickets": pending_tickets,
-            "wati_configured": bool(WATI_API_TOKEN),
-            "timestamp": datetime.utcnow().isoformat()
+            "users": db.query(User).count(),
+            "tickets": db.query(Ticket).count(),
+            "pending": db.query(Ticket).filter(Ticket.status == "pending").count(),
+            "wati": bool(WATI_API_TOKEN),
+            "version": "7.0.0"
         }
     except Exception as e:
         return {"status": "unhealthy", "error": str(e)}
@@ -921,82 +907,56 @@ async def health_check(db: Session = Depends(get_db)):
 # ============================================
 
 @app.get("/api/tickets")
-async def get_all_tickets(
-    status: Optional[str] = None,
-    category: Optional[str] = None,
-    skip: int = 0,
-    limit: int = 100,
-    db: Session = Depends(get_db)
-):
+async def get_tickets(status: Optional[str] = None, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     query = db.query(Ticket).join(User)
-    
     if status:
         query = query.filter(Ticket.status == status)
-    if category:
-        query = query.filter(Ticket.category == category)
     
     tickets = query.order_by(Ticket.created_at.desc()).offset(skip).limit(limit).all()
     
     result = []
     for t in tickets:
-        last_msg_time = t.last_user_message_at or t.created_at
-        time_since = datetime.utcnow() - last_msg_time
-        hours_remaining = max(0, 24 - (time_since.total_seconds() / 3600))
-        
-        message_count = db.query(TicketMessage).filter(TicketMessage.ticket_id == t.id).count()
+        last_msg = t.last_user_message_at or t.created_at
+        hours_left = max(0, 24 - (datetime.utcnow() - last_msg).total_seconds() / 3600)
+        msg_count = db.query(TicketMessage).filter(TicketMessage.ticket_id == t.id).count()
         
         result.append({
             "id": t.id,
             "ticket_number": t.ticket_number,
-            "user_id": t.user_id,
             "user_name": t.user.name,
             "user_phone": t.user.phone_number,
-            "user_email": t.user.email,
             "category": t.category,
             "initial_message": t.initial_message,
             "status": t.status,
-            "message_count": message_count,
-            "is_24hr_active": hours_remaining > 0,
-            "hours_remaining": round(hours_remaining, 1),
+            "message_count": msg_count,
+            "is_24hr_active": hours_left > 0,
+            "hours_remaining": round(hours_left, 1),
             "created_at": convert_to_ist(t.created_at),
-            "updated_at": convert_to_ist(t.updated_at),
             "last_user_message_at": convert_to_ist(t.last_user_message_at),
-            "last_counsellor_reply_at": convert_to_ist(t.last_counsellor_reply_at),
-            "resolved_at": convert_to_ist(t.resolved_at),
-            "resolved_by": t.resolved_by
+            "last_counsellor_reply_at": convert_to_ist(t.last_counsellor_reply_at)
         })
-    
-    total = db.query(Ticket).count()
-    pending = db.query(Ticket).filter(Ticket.status == "pending").count()
-    in_progress = db.query(Ticket).filter(Ticket.status == "in_progress").count()
-    resolved = db.query(Ticket).filter(Ticket.status == "resolved").count()
-    queries = db.query(Ticket).filter(Ticket.category == "query").count()
-    concerns = db.query(Ticket).filter(Ticket.category == "concern").count()
     
     return {
         "tickets": result,
         "stats": {
-            "total": total,
-            "pending": pending,
-            "in_progress": in_progress,
-            "resolved": resolved,
-            "queries": queries,
-            "concerns": concerns
+            "total": db.query(Ticket).count(),
+            "pending": db.query(Ticket).filter(Ticket.status == "pending").count(),
+            "in_progress": db.query(Ticket).filter(Ticket.status == "in_progress").count(),
+            "resolved": db.query(Ticket).filter(Ticket.status == "resolved").count()
         }
     }
 
 
 @app.get("/api/tickets/{ticket_id}")
-async def get_ticket_details(ticket_id: int, db: Session = Depends(get_db)):
+async def get_ticket(ticket_id: int, db: Session = Depends(get_db)):
     ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket not found")
     
     messages = db.query(TicketMessage).filter(TicketMessage.ticket_id == ticket_id).order_by(TicketMessage.created_at.asc()).all()
     
-    last_msg_time = ticket.last_user_message_at or ticket.created_at
-    time_since = datetime.utcnow() - last_msg_time
-    hours_remaining = max(0, 24 - (time_since.total_seconds() / 3600))
+    last_msg = ticket.last_user_message_at or ticket.created_at
+    hours_left = max(0, 24 - (datetime.utcnow() - last_msg).total_seconds() / 3600)
     
     return {
         "ticket": {
@@ -1005,29 +965,22 @@ async def get_ticket_details(ticket_id: int, db: Session = Depends(get_db)):
             "category": ticket.category,
             "initial_message": ticket.initial_message,
             "status": ticket.status,
-            "is_24hr_active": hours_remaining > 0,
-            "hours_remaining": round(hours_remaining, 1),
+            "is_24hr_active": hours_left > 0,
+            "hours_remaining": round(hours_left, 1),
             "created_at": convert_to_ist(ticket.created_at),
-            "updated_at": convert_to_ist(ticket.updated_at),
-            "resolved_at": convert_to_ist(ticket.resolved_at),
-            "resolved_by": ticket.resolved_by,
-            "resolution_notes": ticket.resolution_notes
+            "resolved_at": convert_to_ist(ticket.resolved_at)
         },
         "user": {
             "id": ticket.user.id,
             "name": ticket.user.name,
             "phone_number": ticket.user.phone_number,
-            "email": ticket.user.email,
-            "participation_level": ticket.user.participation_level
+            "email": ticket.user.email
         },
         "messages": [
             {
                 "id": m.id,
                 "direction": m.direction,
-                "message_type": m.message_type,
                 "message_text": m.message_text,
-                "media_url": m.media_url,
-                "media_filename": m.media_filename,
                 "sent_by": m.sent_by,
                 "delivery_status": m.delivery_status,
                 "created_at": convert_to_ist(m.created_at)
@@ -1038,29 +991,30 @@ async def get_ticket_details(ticket_id: int, db: Session = Depends(get_db)):
 
 
 @app.post("/api/tickets/{ticket_id}/reply")
-async def send_ticket_reply(ticket_id: int, reply: TicketReplyRequest, db: Session = Depends(get_db)):
+async def send_reply(ticket_id: int, reply: TicketReplyRequest, db: Session = Depends(get_db)):
     ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket not found")
     
     if ticket.status == "resolved":
-        raise HTTPException(status_code=400, detail="Cannot reply to resolved ticket")
+        raise HTTPException(status_code=400, detail="Ticket already resolved")
     
-    last_msg_time = ticket.last_user_message_at or ticket.created_at
-    hours_since = (datetime.utcnow() - last_msg_time).total_seconds() / 3600
+    last_msg = ticket.last_user_message_at or ticket.created_at
+    hours_since = (datetime.utcnow() - last_msg).total_seconds() / 3600
     
     if hours_since > 24:
-        raise HTTPException(status_code=400, detail="24-hour window has expired. Cannot send session message.")
+        raise HTTPException(status_code=400, detail="24-hour window expired")
     
-    phone_number = ticket.user.phone_number
+    phone = ticket.user.phone_number
     
-    # Send message with buttons
-    full_message = f"{reply.message}\n\n───────────────────\nAre you satisfied with this response?"
+    # Send with satisfaction buttons
+    full_msg = f"{reply.message}\n\n───────────────────\nAre you satisfied with this response?"
     buttons = [{"text": "Yes, Resolved"}, {"text": "Need More Help"}]
     
-    result = send_wati_interactive_buttons(phone_number, full_message, buttons)
+    result = send_wati_interactive_buttons(phone, full_msg, buttons)
     
-    if result["success"]:
+    # Check success properly
+    if result.get("success") or result.get("message_id"):
         db.add(TicketMessage(
             ticket_id=ticket.id,
             direction="outgoing",
@@ -1075,67 +1029,13 @@ async def send_ticket_reply(ticket_id: int, reply: TicketReplyRequest, db: Sessi
         ticket.last_counsellor_reply_at = datetime.utcnow()
         db.commit()
         
-        return {
-            "success": True,
-            "message": "Reply sent successfully",
-            "message_id": result.get("message_id"),
-            "ticket_status": "in_progress"
-        }
+        return {"success": True, "message": "Reply sent", "message_id": result.get("message_id")}
     else:
-        raise HTTPException(status_code=500, detail=f"Failed to send message: {result.get('error')}")
-
-
-@app.post("/api/tickets/{ticket_id}/reply-media")
-async def send_ticket_media_reply(
-    ticket_id: int,
-    media_url: str = Form(...),
-    caption: str = Form(""),
-    media_type: str = Form("image"),
-    counsellor_name: str = Form("Counsellor"),
-    db: Session = Depends(get_db)
-):
-    ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
-    if not ticket:
-        raise HTTPException(status_code=404, detail="Ticket not found")
-    
-    if ticket.status == "resolved":
-        raise HTTPException(status_code=400, detail="Cannot reply to resolved ticket")
-    
-    last_msg_time = ticket.last_user_message_at or ticket.created_at
-    hours_since = (datetime.utcnow() - last_msg_time).total_seconds() / 3600
-    
-    if hours_since > 24:
-        raise HTTPException(status_code=400, detail="24-hour window has expired.")
-    
-    phone_number = ticket.user.phone_number
-    result = send_wati_media(phone_number, media_url, caption, media_type)
-    
-    if result["success"]:
-        db.add(TicketMessage(
-            ticket_id=ticket.id,
-            direction="outgoing",
-            message_type=media_type,
-            message_text=caption,
-            media_url=media_url,
-            sent_by=counsellor_name,
-            wati_message_id=result.get("message_id"),
-            delivery_status="sent"
-        ))
-        
-        ticket.status = "in_progress"
-        ticket.last_counsellor_reply_at = datetime.utcnow()
-        db.commit()
-        
-        # Send satisfaction buttons
-        send_wati_interactive_buttons(phone_number, "Are you satisfied with this response?", [{"text": "Yes, Resolved"}, {"text": "Need More Help"}])
-        
-        return {"success": True, "message": "Media sent successfully", "message_id": result.get("message_id")}
-    else:
-        raise HTTPException(status_code=500, detail=f"Failed to send media: {result.get('error')}")
+        raise HTTPException(status_code=500, detail=f"Failed to send: {result.get('error')}")
 
 
 @app.patch("/api/tickets/{ticket_id}/status")
-async def update_ticket_status(ticket_id: int, update: TicketStatusUpdateRequest, db: Session = Depends(get_db)):
+async def update_status(ticket_id: int, update: TicketStatusUpdateRequest, db: Session = Depends(get_db)):
     ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket not found")
@@ -1149,11 +1049,9 @@ async def update_ticket_status(ticket_id: int, update: TicketStatusUpdateRequest
     
     if update.resolved_by:
         ticket.resolved_by = update.resolved_by
-    if update.resolution_notes:
-        ticket.resolution_notes = update.resolution_notes
     
     db.commit()
-    return {"success": True, "ticket_number": ticket.ticket_number, "new_status": update.status}
+    return {"success": True, "status": update.status}
 
 
 # ============================================
@@ -1161,210 +1059,40 @@ async def update_ticket_status(ticket_id: int, update: TicketStatusUpdateRequest
 # ============================================
 
 @app.get("/api/users")
-async def get_all_users(
-    skip: int = 0,
-    limit: int = 500,
-    participation_level: Optional[str] = None,
-    db: Session = Depends(get_db)
-):
-    query = db.query(User)
-    if participation_level:
-        query = query.filter(User.participation_level == participation_level)
-    
-    users = query.order_by(User.last_interaction.desc()).offset(skip).limit(limit).all()
-    
-    result = []
-    for user in users:
-        courses = [c[0] for c in db.query(CourseInterest.course_name).filter(CourseInterest.user_id == user.id).distinct().all()]
-        total_tickets = db.query(Ticket).filter(Ticket.user_id == user.id).count()
-        pending_tickets = db.query(Ticket).filter(Ticket.user_id == user.id, Ticket.status.in_(["pending", "in_progress"])).count()
-        latest_feedback = db.query(Feedback).filter(Feedback.user_id == user.id).order_by(Feedback.created_at.desc()).first()
-        
-        result.append({
-            "id": user.id,
-            "name": user.name,
-            "email": user.email,
-            "phone_number": user.phone_number,
-            "participation_level": user.participation_level,
-            "enrolled_program": user.enrolled_program,
-            "has_active_ticket": user.has_active_ticket,
-            "total_tickets": total_tickets,
-            "pending_tickets": pending_tickets,
-            "course_interests": courses,
-            "feedback": latest_feedback.feedback_text if latest_feedback else None,
-            "first_seen": convert_to_ist(user.first_seen),
-            "last_interaction": convert_to_ist(user.last_interaction)
-        })
-    
-    return {"users": result, "total": len(result)}
-
-
-@app.get("/api/users/{user_id}")
-async def get_user_details(user_id: int, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    course_interests = db.query(CourseInterest).filter(CourseInterest.user_id == user.id).all()
-    tickets = db.query(Ticket).filter(Ticket.user_id == user.id).order_by(Ticket.created_at.desc()).all()
-    feedbacks = db.query(Feedback).filter(Feedback.user_id == user.id).order_by(Feedback.created_at.desc()).all()
+async def get_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    users = db.query(User).order_by(User.last_interaction.desc()).offset(skip).limit(limit).all()
     
     return {
-        "user": {
-            "id": user.id,
-            "name": user.name,
-            "email": user.email,
-            "phone_number": user.phone_number,
-            "participation_level": user.participation_level,
-            "enrolled_program": user.enrolled_program,
-            "has_active_ticket": user.has_active_ticket,
-            "first_seen": convert_to_ist(user.first_seen),
-            "last_interaction": convert_to_ist(user.last_interaction)
-        },
-        "course_interests": [
-            {"course_name": ci.course_name, "click_count": ci.click_count, "first_clicked": convert_to_ist(ci.first_clicked), "last_clicked": convert_to_ist(ci.last_clicked)}
-            for ci in course_interests
+        "users": [
+            {
+                "id": u.id,
+                "name": u.name,
+                "phone_number": u.phone_number,
+                "email": u.email,
+                "participation_level": u.participation_level,
+                "has_active_ticket": u.has_active_ticket,
+                "last_interaction": convert_to_ist(u.last_interaction)
+            }
+            for u in users
         ],
-        "tickets": [
-            {"id": t.id, "ticket_number": t.ticket_number, "category": t.category, "status": t.status, "initial_message": t.initial_message[:100] + "..." if len(t.initial_message) > 100 else t.initial_message, "created_at": convert_to_ist(t.created_at)}
-            for t in tickets
-        ],
-        "feedbacks": [
-            {"id": f.id, "feedback_text": f.feedback_text, "created_at": convert_to_ist(f.created_at)}
-            for f in feedbacks
-        ]
+        "total": db.query(User).count()
     }
 
 
 # ============================================
-# COURSE INTEREST ENDPOINTS
-# ============================================
-
-@app.get("/api/course-interests")
-async def get_course_interests_summary(db: Session = Depends(get_db)):
-    courses = ["LEP", "100BM", "MBW", "Masterclass"]
-    result = []
-    for course in courses:
-        total_clicks = db.query(func.sum(CourseInterest.click_count)).filter(CourseInterest.course_name == course).scalar() or 0
-        unique_users = db.query(CourseInterest).filter(CourseInterest.course_name == course).count()
-        result.append({"course_name": course, "total_clicks": int(total_clicks), "unique_users": unique_users})
-    return {"course_interests": result}
-
-
-@app.get("/api/course-interests/{course_name}")
-async def get_course_interest_users(course_name: str, db: Session = Depends(get_db)):
-    interests = db.query(CourseInterest).join(User).filter(CourseInterest.course_name == course_name).order_by(CourseInterest.click_count.desc()).all()
-    result = [
-        {"user_id": ci.user.id, "name": ci.user.name, "email": ci.user.email, "phone_number": ci.user.phone_number, "click_count": ci.click_count, "first_clicked": convert_to_ist(ci.first_clicked), "last_clicked": convert_to_ist(ci.last_clicked)}
-        for ci in interests
-    ]
-    return {"course_name": course_name, "users": result, "total_users": len(result), "total_clicks": sum(u["click_count"] for u in result)}
-
-
-# ============================================
-# FEEDBACK ENDPOINTS
-# ============================================
-
-@app.get("/api/feedbacks")
-async def get_all_feedbacks(skip: int = 0, limit: int = 500, db: Session = Depends(get_db)):
-    feedbacks = db.query(Feedback).join(User).order_by(Feedback.created_at.desc()).offset(skip).limit(limit).all()
-    result = [
-        {"id": f.id, "user_id": f.user.id, "user_name": f.user.name, "user_phone": f.user.phone_number, "user_email": f.user.email, "feedback_text": f.feedback_text, "created_at": convert_to_ist(f.created_at)}
-        for f in feedbacks
-    ]
-    return {"feedbacks": result, "total": len(result)}
-
-
-# ============================================
-# BROADCAST ENDPOINTS
-# ============================================
-
-@app.get("/api/broadcasts")
-async def get_all_broadcasts(status: Optional[str] = None, skip: int = 0, limit: int = 500, db: Session = Depends(get_db)):
-    query = db.query(BroadcastMessage)
-    if status:
-        query = query.filter(BroadcastMessage.status == status)
-    
-    broadcasts = query.order_by(BroadcastMessage.sent_at.desc()).offset(skip).limit(limit).all()
-    result = [
-        {
-            "id": b.id, "phone_number": b.phone_number, "recipient_name": b.recipient_name, "message_text": b.message_text,
-            "message_type": b.message_type, "status": b.status, "failure_reason": b.failure_reason, "manually_sent": b.manually_sent,
-            "manually_sent_at": convert_to_ist(b.manually_sent_at), "manually_sent_by": b.manually_sent_by,
-            "sent_at": convert_to_ist(b.sent_at), "delivered_at": convert_to_ist(b.delivered_at), "failed_at": convert_to_ist(b.failed_at)
-        }
-        for b in broadcasts
-    ]
-    return {"broadcasts": result, "total": len(result)}
-
-
-@app.get("/api/broadcasts/failed")
-async def get_failed_broadcasts(skip: int = 0, limit: int = 500, db: Session = Depends(get_db)):
-    broadcasts = db.query(BroadcastMessage).filter(BroadcastMessage.status == "failed", BroadcastMessage.manually_sent == False).order_by(BroadcastMessage.failed_at.desc()).offset(skip).limit(limit).all()
-    result = [
-        {"id": b.id, "phone_number": b.phone_number, "recipient_name": b.recipient_name, "message_text": b.message_text, "message_type": b.message_type, "failure_reason": b.failure_reason, "failed_at": convert_to_ist(b.failed_at), "sent_at": convert_to_ist(b.sent_at)}
-        for b in broadcasts
-    ]
-    return {"failed_broadcasts": result, "total": len(result)}
-
-
-@app.get("/api/broadcasts/stats")
-async def get_broadcast_stats(db: Session = Depends(get_db)):
-    return {
-        "total": db.query(BroadcastMessage).count(),
-        "sent": db.query(BroadcastMessage).filter(BroadcastMessage.status == "sent").count(),
-        "delivered": db.query(BroadcastMessage).filter(BroadcastMessage.status == "delivered").count(),
-        "read": db.query(BroadcastMessage).filter(BroadcastMessage.status == "read").count(),
-        "failed": db.query(BroadcastMessage).filter(BroadcastMessage.status == "failed").count(),
-        "manually_sent": db.query(BroadcastMessage).filter(BroadcastMessage.manually_sent == True).count(),
-        "pending_manual_send": db.query(BroadcastMessage).filter(BroadcastMessage.status == "failed", BroadcastMessage.manually_sent == False).count()
-    }
-
-
-@app.patch("/api/broadcasts/{broadcast_id}/mark-resent")
-async def mark_broadcast_as_manually_sent(broadcast_id: int, request: BroadcastMarkResentRequest, db: Session = Depends(get_db)):
-    broadcast = db.query(BroadcastMessage).filter(BroadcastMessage.id == broadcast_id).first()
-    if not broadcast:
-        raise HTTPException(status_code=404, detail="Broadcast not found")
-    
-    broadcast.manually_sent = True
-    broadcast.manually_sent_at = datetime.utcnow()
-    broadcast.manually_sent_by = request.manually_sent_by
-    db.commit()
-    return {"status": "success", "broadcast_id": broadcast_id, "manually_sent": True}
-
-
-# ============================================
-# ANALYTICS SUMMARY
+# ANALYTICS
 # ============================================
 
 @app.get("/api/analytics/summary")
-async def get_analytics_summary(db: Session = Depends(get_db)):
-    total_users = db.query(User).count()
-    new_users = db.query(User).filter(User.participation_level == "New to platform").count()
-    enrolled_users = db.query(User).filter(User.participation_level == "Enrolled Participant").count()
-    
-    enrolled_by_program = {program: db.query(User).filter(User.enrolled_program.ilike(f"%{program}%")).count() for program in ["LEP", "100BM", "MBW", "Masterclass"]}
-    
-    course_stats = []
-    for course in ["LEP", "100BM", "MBW", "Masterclass"]:
-        total_clicks = db.query(func.sum(CourseInterest.click_count)).filter(CourseInterest.course_name == course).scalar() or 0
-        unique_users = db.query(CourseInterest).filter(CourseInterest.course_name == course).count()
-        course_stats.append({"course": course, "total_clicks": int(total_clicks), "unique_users": unique_users})
-    
+async def analytics(db: Session = Depends(get_db)):
     return {
-        "users": {"total": total_users, "new": new_users, "enrolled": enrolled_users, "enrolled_by_program": enrolled_by_program},
+        "users": {"total": db.query(User).count()},
         "tickets": {
             "total": db.query(Ticket).count(),
             "pending": db.query(Ticket).filter(Ticket.status == "pending").count(),
             "in_progress": db.query(Ticket).filter(Ticket.status == "in_progress").count(),
-            "resolved": db.query(Ticket).filter(Ticket.status == "resolved").count(),
-            "queries": db.query(Ticket).filter(Ticket.category == "query").count(),
-            "concerns": db.query(Ticket).filter(Ticket.category == "concern").count()
-        },
-        "feedbacks": {"total": db.query(Feedback).count()},
-        "broadcasts": {"total": db.query(BroadcastMessage).count(), "failed_pending": db.query(BroadcastMessage).filter(BroadcastMessage.status == "failed", BroadcastMessage.manually_sent == False).count()},
-        "course_interests": course_stats
+            "resolved": db.query(Ticket).filter(Ticket.status == "resolved").count()
+        }
     }
 
 
@@ -1373,44 +1101,36 @@ async def get_analytics_summary(db: Session = Depends(get_db)):
 # ============================================
 
 @app.get("/api/webhook-logs")
-async def get_webhook_logs(limit: int = 50, is_outgoing: Optional[bool] = None, db: Session = Depends(get_db)):
-    query = db.query(WebhookLog)
-    if is_outgoing is not None:
-        query = query.filter(WebhookLog.is_outgoing == is_outgoing)
-    
-    logs = query.order_by(WebhookLog.created_at.desc()).limit(limit).all()
+async def get_logs(limit: int = 50, db: Session = Depends(get_db)):
+    logs = db.query(WebhookLog).order_by(WebhookLog.created_at.desc()).limit(limit).all()
     return {
         "logs": [
-            {"id": log.id, "event_type": log.event_type, "phone_number": log.phone_number, "is_outgoing": log.is_outgoing, "action_taken": log.action_taken, "processed": log.processed, "created_at": convert_to_ist(log.created_at)}
-            for log in logs
+            {
+                "id": l.id,
+                "event_type": l.event_type,
+                "phone_number": l.phone_number,
+                "message_id": l.message_id,
+                "is_outgoing": l.is_outgoing,
+                "action_taken": l.action_taken,
+                "created_at": convert_to_ist(l.created_at)
+            }
+            for l in logs
         ]
     }
 
 
-@app.get("/api/webhook-logs/{log_id}/raw")
-async def get_webhook_log_raw(log_id: int, db: Session = Depends(get_db)):
-    log = db.query(WebhookLog).filter(WebhookLog.id == log_id).first()
-    if not log:
-        raise HTTPException(status_code=404, detail="Log not found")
-    return {"id": log.id, "raw_data": json.loads(log.raw_data) if log.raw_data else None}
-
-
 # ============================================
-# RUN SERVER
+# RUN
 # ============================================
 
 if __name__ == "__main__":
     import uvicorn
-    
     print()
-    print("=" * 60)
-    print("🚀 Iron Lady WATI Analytics API v6.1.0 - Production Ready")
-    print("=" * 60)
+    print("=" * 50)
+    print("🚀 Iron Lady WATI Analytics API v7.0.0")
+    print("=" * 50)
+    print(f"📍 http://{API_HOST}:{API_PORT}")
+    print(f"📚 Docs: http://{API_HOST}:{API_PORT}/docs")
+    print(f"🔑 WATI: {'✅' if WATI_API_TOKEN else '❌'}")
     print()
-    print(f"📍 Server: http://{API_HOST}:{API_PORT}")
-    print(f"📚 API Docs: http://{API_HOST}:{API_PORT}/docs")
-    print()
-    print(f"🔑 WATI: {'Configured ✅' if WATI_API_TOKEN else 'NOT SET ❌'}")
-    print()
-    
     uvicorn.run(app, host=API_HOST, port=API_PORT)
