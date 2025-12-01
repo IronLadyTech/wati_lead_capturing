@@ -73,32 +73,68 @@ const CounsellorQueryBadge = ({ query, requestedAt, userId, onMarkDone }) => {
   const [marking, setMarking] = useState(false);
   const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 });
   const iconRef = useRef(null);
+  const tooltipRef = useRef(null);
 
-  const handleMouseEnter = () => {
+  // Close tooltip when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (
+        showTooltip &&
+        iconRef.current &&
+        !iconRef.current.contains(event.target) &&
+        tooltipRef.current &&
+        !tooltipRef.current.contains(event.target)
+      ) {
+        setShowTooltip(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showTooltip]);
+
+  const handleClick = (e) => {
+    e.stopPropagation();
     if (iconRef.current) {
       const rect = iconRef.current.getBoundingClientRect();
-      setTooltipPosition({
-        top: rect.top - 10,
-        left: rect.left + rect.width / 2
-      });
+      const viewportHeight = window.innerHeight;
+      const viewportWidth = window.innerWidth;
+      
+      // Calculate position - show above if enough space, otherwise below
+      let top = rect.top - 10;
+      let transformY = '-100%';
+      
+      // If not enough space above, show below
+      if (rect.top < 250) {
+        top = rect.bottom + 10;
+        transformY = '0';
+      }
+      
+      // Ensure tooltip doesn't go off-screen horizontally
+      let left = rect.left + rect.width / 2;
+      if (left < 200) left = 200;
+      if (left > viewportWidth - 200) left = viewportWidth - 200;
+      
+      setTooltipPosition({ top, left, transformY });
     }
-    setShowTooltip(true);
-  };
-
-  const handleMouseLeave = () => {
-    setShowTooltip(false);
+    setShowTooltip(!showTooltip);
   };
 
   const handleMarkDone = async (e) => {
     e.stopPropagation();
     setMarking(true);
     try {
-      await fetch(`${API_URL}/api/users/${userId}/counsellor-done`, {
+      const res = await fetch(`${API_URL}/api/users/${userId}/counsellor-done`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ resolved_by: 'Dashboard User' })
       });
-      if (onMarkDone) onMarkDone();
+      if (res.ok) {
+        setShowTooltip(false);
+        if (onMarkDone) onMarkDone();
+      }
     } catch (err) {
       console.error(err);
     }
@@ -108,23 +144,27 @@ const CounsellorQueryBadge = ({ query, requestedAt, userId, onMarkDone }) => {
   if (!query) return <span className="dot">•</span>;
 
   return (
-    <div 
-      className="counsellor-query-badge-container"
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
-    >
-      <span ref={iconRef} className="counsellor-query-icon" title="Hover to see query">
+    <div className="counsellor-query-badge-container">
+      <span 
+        ref={iconRef}
+        className="counsellor-query-icon" 
+        onClick={handleClick}
+        style={{ cursor: 'pointer' }}
+      >
         📞💬
       </span>
       {showTooltip && (
         <div 
+          ref={tooltipRef}
           className="counsellor-tooltip"
           style={{
             position: 'fixed',
             top: `${tooltipPosition.top}px`,
             left: `${tooltipPosition.left}px`,
-            transform: 'translate(-50%, -100%)'
+            transform: `translate(-50%, ${tooltipPosition.transformY || '-100%'})`,
+            zIndex: 9999
           }}
+          onClick={(e) => e.stopPropagation()}
         >
           <div className="tooltip-header">
             <span>📞 Counsellor Request</span>
@@ -139,7 +179,14 @@ const CounsellorQueryBadge = ({ query, requestedAt, userId, onMarkDone }) => {
               onClick={handleMarkDone}
               disabled={marking}
             >
-              {marking ? '...' : '✅ Mark Done'}
+              {marking ? 'Processing...' : '✅ Mark Done'}
+            </button>
+            <button 
+              className="btn btn-sm btn-secondary"
+              onClick={() => setShowTooltip(false)}
+              style={{ marginLeft: '8px' }}
+            >
+              Close
             </button>
           </div>
         </div>
