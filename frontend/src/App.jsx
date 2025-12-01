@@ -1,10 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import './App.css';
-
-// API Base URL
+import React, { useState, useEffect, useCallback, useRef } from 'react';// API Base URL
 const API_URL = "https://wati-leads-dashboard.iamironlady.com";
 // Add useRef to imports
-import React, { useState, useEffect, useCallback, useRef } from 'react';
 // ============================================
 // SIMPLE BAR CHART COMPONENT
 // ============================================
