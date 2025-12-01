@@ -3,7 +3,8 @@ import './App.css';
 
 // API Base URL
 const API_URL = "https://wati-leads-dashboard.iamironlady.com";
-
+// Add useRef to imports
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 // ============================================
 // SIMPLE BAR CHART COMPONENT
 // ============================================
@@ -74,6 +75,23 @@ const getStatusIcon = (status) => {
 const CounsellorQueryBadge = ({ query, requestedAt, userId, onMarkDone }) => {
   const [showTooltip, setShowTooltip] = useState(false);
   const [marking, setMarking] = useState(false);
+  const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 });
+  const iconRef = useRef(null);
+
+  const handleMouseEnter = () => {
+    if (iconRef.current) {
+      const rect = iconRef.current.getBoundingClientRect();
+      setTooltipPosition({
+        top: rect.top - 10,
+        left: rect.left + rect.width / 2
+      });
+    }
+    setShowTooltip(true);
+  };
+
+  const handleMouseLeave = () => {
+    setShowTooltip(false);
+  };
 
   const handleMarkDone = async (e) => {
     e.stopPropagation();
@@ -96,14 +114,22 @@ const CounsellorQueryBadge = ({ query, requestedAt, userId, onMarkDone }) => {
   return (
     <div 
       className="counsellor-query-badge-container"
-      onMouseEnter={() => setShowTooltip(true)}
-      onMouseLeave={() => setShowTooltip(false)}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
     >
-      <span className="counsellor-query-icon" title="Click to see query">
+      <span ref={iconRef} className="counsellor-query-icon" title="Hover to see query">
         📞💬
       </span>
       {showTooltip && (
-        <div className="counsellor-tooltip">
+        <div 
+          className="counsellor-tooltip"
+          style={{
+            position: 'fixed',
+            top: `${tooltipPosition.top}px`,
+            left: `${tooltipPosition.left}px`,
+            transform: 'translate(-50%, -100%)'
+          }}
+        >
           <div className="tooltip-header">
             <span>📞 Counsellor Request</span>
             {requestedAt && <span className="tooltip-date">{formatDate(requestedAt)}</span>}
@@ -125,7 +151,6 @@ const CounsellorQueryBadge = ({ query, requestedAt, userId, onMarkDone }) => {
     </div>
   );
 };
-
 // ============================================
 // TICKET DETAIL MODAL WITH CONVERSATION
 // ============================================
