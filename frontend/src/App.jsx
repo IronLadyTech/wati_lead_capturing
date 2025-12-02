@@ -1,6 +1,8 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';// API Base URL
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+
+// API Base URL
 const API_URL = "https://wati-leads-dashboard.iamironlady.com";
-// Add useRef to imports
+
 // ============================================
 // SIMPLE BAR CHART COMPONENT
 // ============================================
@@ -75,7 +77,6 @@ const CounsellorQueryBadge = ({ query, requestedAt, userId, onMarkDone }) => {
   const iconRef = useRef(null);
   const tooltipRef = useRef(null);
 
-  // Close tooltip when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (
@@ -99,20 +100,16 @@ const CounsellorQueryBadge = ({ query, requestedAt, userId, onMarkDone }) => {
     e.stopPropagation();
     if (iconRef.current) {
       const rect = iconRef.current.getBoundingClientRect();
-      const viewportHeight = window.innerHeight;
       const viewportWidth = window.innerWidth;
       
-      // Calculate position - show above if enough space, otherwise below
       let top = rect.top - 10;
       let transformY = '-100%';
       
-      // If not enough space above, show below
       if (rect.top < 250) {
         top = rect.bottom + 10;
         transformY = '0';
       }
       
-      // Ensure tooltip doesn't go off-screen horizontally
       let left = rect.left + rect.width / 2;
       if (left < 200) left = 200;
       if (left > viewportWidth - 200) left = viewportWidth - 200;
@@ -194,8 +191,9 @@ const CounsellorQueryBadge = ({ query, requestedAt, userId, onMarkDone }) => {
     </div>
   );
 };
+
 // ============================================
-// TICKET DETAIL MODAL WITH CONVERSATION
+// TICKET DETAIL MODAL WITH CONVERSATION & REPLY-TO FEATURE
 // ============================================
 const TicketDetailModal = ({ isOpen, onClose, ticketId, onTicketUpdate }) => {
   const [ticket, setTicket] = useState(null);
@@ -203,6 +201,15 @@ const TicketDetailModal = ({ isOpen, onClose, ticketId, onTicketUpdate }) => {
   const [replyText, setReplyText] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
+  
+  // State for reply-to message feature
+  const [replyToMessage, setReplyToMessage] = useState(null);
+  
+  const messagesEndRef = useRef(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
 
   const fetchTicketDetails = useCallback(async () => {
     if (!ticketId) return;
@@ -214,6 +221,7 @@ const TicketDetailModal = ({ isOpen, onClose, ticketId, onTicketUpdate }) => {
       const data = await res.json();
       setTicket(data);
       setLoading(false);
+      setTimeout(scrollToBottom, 100);
     } catch (err) {
       console.error(err);
       setError('Failed to load ticket details');
@@ -224,8 +232,21 @@ const TicketDetailModal = ({ isOpen, onClose, ticketId, onTicketUpdate }) => {
   useEffect(() => {
     if (isOpen && ticketId) {
       fetchTicketDetails();
+      setReplyToMessage(null);
     }
   }, [isOpen, ticketId, fetchTicketDetails]);
+
+  // Handle clicking on a message to reply to it
+  const handleSelectReplyTo = (msg) => {
+    if (msg.direction === 'incoming' && msg.wati_message_id) {
+      setReplyToMessage(msg);
+    }
+  };
+
+  // Clear the reply-to selection
+  const handleClearReplyTo = () => {
+    setReplyToMessage(null);
+  };
 
   const handleSendReply = async () => {
     if (!replyText.trim()) return;
@@ -234,19 +255,28 @@ const TicketDetailModal = ({ isOpen, onClose, ticketId, onTicketUpdate }) => {
     setError(null);
     
     try {
+      const requestBody = {
+        message: replyText,
+        counsellor_name: 'Counsellor'
+      };
+      
+      // Add reply-to information if a message is selected
+      if (replyToMessage) {
+        requestBody.reply_to_message_id = replyToMessage.id;
+        requestBody.reply_to_wati_id = replyToMessage.wati_message_id;
+      }
+      
       const res = await fetch(`${API_URL}/api/tickets/${ticketId}/reply`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: replyText,
-          counsellor_name: 'Counsellor'
-        })
+        body: JSON.stringify(requestBody)
       });
       
       const data = await res.json();
       
       if (res.ok && data.success) {
         setReplyText('');
+        setReplyToMessage(null);
         fetchTicketDetails();
         if (onTicketUpdate) onTicketUpdate();
       } else {
@@ -351,7 +381,10 @@ const TicketDetailModal = ({ isOpen, onClose, ticketId, onTicketUpdate }) => {
 
             {/* Conversation Thread */}
             <div className="conversation-container">
-              <h3 className="conversation-title">💬 Conversation</h3>
+              <h3 className="conversation-title">
+                💬 Conversation
+                <span className="reply-hint">💡 Click on user message to reply to it specifically</span>
+              </h3>
               <div className="messages-list">
                 {ticket.messages.length === 0 ? (
                   <div className="no-messages">No messages yet</div>
@@ -359,8 +392,23 @@ const TicketDetailModal = ({ isOpen, onClose, ticketId, onTicketUpdate }) => {
                   ticket.messages.map((msg, idx) => (
                     <div 
                       key={idx} 
-                      className={`message-bubble ${msg.direction === 'incoming' ? 'message-incoming' : 'message-outgoing'}`}
+                      className={`message-bubble ${msg.direction === 'incoming' ? 'message-incoming' : 'message-outgoing'} ${msg.direction === 'incoming' && msg.wati_message_id ? 'message-replyable' : ''} ${replyToMessage?.id === msg.id ? 'message-selected' : ''}`}
+                      onClick={() => handleSelectReplyTo(msg)}
+                      title={msg.direction === 'incoming' && msg.wati_message_id ? 'Click to reply to this message' : ''}
                     >
+                      {/* Show quoted message if this is a reply */}
+                      {msg.reply_to_message && (
+                        <div className="quoted-message">
+                          <div className="quoted-message-header">
+                            ↩️ Replying to {msg.reply_to_message.direction === 'incoming' ? 'User' : 'Counsellor'}
+                          </div>
+                          <div className="quoted-message-text">
+                            {msg.reply_to_message.message_text?.substring(0, 100)}
+                            {msg.reply_to_message.message_text?.length > 100 ? '...' : ''}
+                          </div>
+                        </div>
+                      )}
+                      
                       <div className="message-header">
                         <span className="message-sender">
                           {msg.direction === 'incoming' ? '👤 User' : `🎧 ${msg.sent_by || 'Counsellor'}`}
@@ -385,9 +433,23 @@ const TicketDetailModal = ({ isOpen, onClose, ticketId, onTicketUpdate }) => {
                           {msg.delivery_status === 'failed' && '❌ Failed'}
                         </div>
                       )}
+                      
+                      {/* Reply button for incoming messages */}
+                      {msg.direction === 'incoming' && msg.wati_message_id && (
+                        <button 
+                          className="reply-to-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSelectReplyTo(msg);
+                          }}
+                        >
+                          ↩️ Reply
+                        </button>
+                      )}
                     </div>
                   ))
                 )}
+                <div ref={messagesEndRef} />
               </div>
             </div>
 
@@ -404,9 +466,32 @@ const TicketDetailModal = ({ isOpen, onClose, ticketId, onTicketUpdate }) => {
                   </div>
                 ) : (
                   <>
+                    {/* Reply-To Preview */}
+                    {replyToMessage && (
+                      <div className="reply-to-preview">
+                        <div className="reply-to-header">
+                          <span>↩️ Replying to:</span>
+                          <button 
+                            className="reply-to-clear"
+                            onClick={handleClearReplyTo}
+                            title="Cancel reply"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                        <div className="reply-to-content">
+                          <span className="reply-to-sender">👤 User</span>
+                          <p className="reply-to-text">
+                            {replyToMessage.message_text?.substring(0, 150)}
+                            {replyToMessage.message_text?.length > 150 ? '...' : ''}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                    
                     <textarea
                       className="reply-textarea"
-                      placeholder="Type your reply here..."
+                      placeholder={replyToMessage ? `Reply to: "${replyToMessage.message_text?.substring(0, 50)}..."` : "Type your reply here..."}
                       value={replyText}
                       onChange={(e) => setReplyText(e.target.value)}
                       rows={3}
@@ -418,10 +503,13 @@ const TicketDetailModal = ({ isOpen, onClose, ticketId, onTicketUpdate }) => {
                         onClick={handleSendReply}
                         disabled={sending || !replyText.trim()}
                       >
-                        {sending ? '📤 Sending...' : '📤 Send Reply'}
+                        {sending ? '📤 Sending...' : replyToMessage ? '↩️ Send Reply' : '📤 Send Reply'}
                       </button>
                       <span className="reply-note">
-                        ℹ️ User will receive satisfaction buttons with your reply
+                        {replyToMessage 
+                          ? '↩️ Your reply will quote the selected message on WhatsApp'
+                          : 'ℹ️ Click on a user message to reply to it specifically'
+                        }
                       </span>
                     </div>
                   </>
@@ -547,7 +635,6 @@ const UserDetailModal = ({ isOpen, onClose, userId }) => {
                 </div>
               </div>
               
-              {/* Counsellor Query Section */}
               {user.user.counsellor_query && (
                 <div className="detail-card detail-card-full">
                   <h3>📞 Counsellor Query</h3>
@@ -558,7 +645,6 @@ const UserDetailModal = ({ isOpen, onClose, userId }) => {
                 </div>
               )}
               
-              {/* Feedbacks Section */}
               {user.feedbacks && user.feedbacks.length > 0 && (
                 <div className="detail-card detail-card-full">
                   <h3>💬 Feedbacks ({user.feedbacks.length})</h3>
@@ -573,7 +659,6 @@ const UserDetailModal = ({ isOpen, onClose, userId }) => {
                 </div>
               )}
               
-              {/* Tickets Section */}
               {user.tickets && user.tickets.length > 0 && (
                 <div className="detail-card detail-card-full">
                   <h3>🎫 Tickets ({user.tickets.length})</h3>
@@ -607,7 +692,7 @@ const UserDetailModal = ({ isOpen, onClose, userId }) => {
 };
 
 // ============================================
-// TICKETS VIEW COMPONENT (QUERIES & CONCERNS)
+// TICKETS VIEW COMPONENT
 // ============================================
 const TicketsView = () => {
   const [tickets, setTickets] = useState([]);
@@ -1393,15 +1478,12 @@ function App() {
   const [error, setError] = useState(null);
   const [activeView, setActiveView] = useState('leads');
   
-  // Filters
   const [timeFilter, setTimeFilter] = useState('All');
   const [participationFilter, setParticipationFilter] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
   
-  // Modals
   const [userModal, setUserModal] = useState({ isOpen: false, userId: null });
 
-  // Fetch data
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
@@ -1420,9 +1502,7 @@ function App() {
     fetchData();
   }, [fetchData]);
 
-  // Filter users
   const filteredUsers = users.filter(user => {
-    // Time filter
     if (timeFilter !== 'All') {
       const userDate = new Date(user.first_seen);
       const now = new Date();
@@ -1444,12 +1524,10 @@ function App() {
       }
     }
     
-    // Participation filter
     if (participationFilter !== 'All' && user.participation_level !== participationFilter) {
       return false;
     }
     
-    // Search filter
     if (searchTerm) {
       const search = searchTerm.toLowerCase();
       const name = (user.name || '').toLowerCase();
@@ -1463,12 +1541,10 @@ function App() {
     return true;
   });
 
-  // Handle user click
   const handleUserClick = (userId) => {
     setUserModal({ isOpen: true, userId });
   };
 
-  // Download CSV
   const downloadCSV = () => {
     const headers = ['Name', 'Email', 'Phone', 'Participation', 'Needs Counsellor', 'Counsellor Query', 'Course Interest', 'First Seen', 'Last Active'];
     const rows = filteredUsers.map(user => {
@@ -1494,7 +1570,6 @@ function App() {
     a.click();
   };
 
-  // Render different views
   const renderContent = () => {
     switch (activeView) {
       case 'tickets':
@@ -1510,7 +1585,6 @@ function App() {
     }
   };
 
-  // Leads View
   const renderLeadsView = () => {
     if (loading) {
       return (
@@ -1632,7 +1706,6 @@ function App() {
 
   return (
     <div className="app">
-      {/* Header */}
       <header className="header">
         <div className="header-content">
           <img src="/logo.png" alt="Iron Lady" className="logo" onError={(e) => e.target.style.display = 'none'} />
@@ -1641,7 +1714,6 @@ function App() {
         <div className="header-subtitle">ELEVATING A MILLION WOMEN TO THE TOP</div>
       </header>
 
-      {/* Filters */}
       <div className="filters-section">
         <div className="filters-row">
           <div className="filter-group">
@@ -1683,20 +1755,16 @@ function App() {
         </div>
       </div>
 
-      {/* Action Buttons */}
       <ActionButtons activeView={activeView} setActiveView={setActiveView} />
 
-      {/* Main Content */}
       <main className="main-content">
         {renderContent()}
       </main>
 
-      {/* Footer */}
       <footer className="footer">
-        <p>Last updated: {new Date().toLocaleString('en-IN')} | Iron Lady WATI Analytics v5.1.0</p>
+        <p>Last updated: {new Date().toLocaleString('en-IN')} | Iron Lady WATI Analytics v5.2.0 - Reply-to-Message Feature</p>
       </footer>
 
-      {/* Modals */}
       <UserDetailModal
         isOpen={userModal.isOpen}
         onClose={() => setUserModal({ isOpen: false, userId: null })}
@@ -1707,159 +1775,3 @@ function App() {
 }
 
 export default App;
-
-/* 
-  Additional CSS to add to App.css for the new components:
-
-  .counsellor-query-badge-container {
-    position: relative;
-    display: inline-block;
-  }
-
-  .counsellor-query-icon {
-    cursor: pointer;
-    font-size: 1.2rem;
-    padding: 0.25rem;
-    border-radius: 6px;
-    background: linear-gradient(135deg, #fff3cd, #ffeeba);
-    transition: transform 0.2s ease;
-  }
-
-  .counsellor-query-icon:hover {
-    transform: scale(1.1);
-  }
-
-  .counsellor-tooltip {
-    position: absolute;
-    bottom: 100%;
-    left: 50%;
-    transform: translateX(-50%);
-    min-width: 300px;
-    max-width: 400px;
-    background: white;
-    border: 1px solid #e0e0e0;
-    border-radius: 12px;
-    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
-    z-index: 1000;
-    margin-bottom: 10px;
-    animation: fadeIn 0.2s ease;
-  }
-
-  .counsellor-tooltip::after {
-    content: '';
-    position: absolute;
-    top: 100%;
-    left: 50%;
-    transform: translateX(-50%);
-    border: 8px solid transparent;
-    border-top-color: white;
-  }
-
-  .tooltip-header {
-    background: linear-gradient(135deg, #8B0000, #c41e3a);
-    color: white;
-    padding: 0.75rem 1rem;
-    border-radius: 12px 12px 0 0;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  .tooltip-date {
-    font-size: 0.75rem;
-    opacity: 0.9;
-  }
-
-  .tooltip-content {
-    padding: 1rem;
-  }
-
-  .tooltip-query {
-    margin: 0;
-    color: #333;
-    line-height: 1.5;
-    background: #f8f9fa;
-    padding: 0.75rem;
-    border-radius: 8px;
-    border-left: 3px solid #8B0000;
-  }
-
-  .tooltip-actions {
-    padding: 0.75rem 1rem;
-    border-top: 1px solid #e0e0e0;
-    text-align: right;
-  }
-
-  .btn-sm {
-    padding: 0.4rem 0.8rem;
-    font-size: 0.8rem;
-  }
-
-  // User modal improvements
-  .detail-card-full {
-    grid-column: 1 / -1;
-  }
-
-  .counsellor-query-detail {
-    background: linear-gradient(135deg, #fff3cd, #ffeeba);
-    padding: 1rem;
-    border-radius: 8px;
-    border-left: 4px solid #ffc107;
-  }
-
-  .counsellor-query-detail p {
-    margin: 0 0 0.5rem 0;
-    color: #333;
-    line-height: 1.5;
-  }
-
-  .query-date {
-    font-size: 0.8rem;
-    color: #666;
-  }
-
-  .feedbacks-mini-list,
-  .tickets-mini-list {
-    max-height: 200px;
-    overflow-y: auto;
-  }
-
-  .feedback-mini-item {
-    padding: 0.75rem;
-    background: #f8f9fa;
-    border-radius: 8px;
-    margin-bottom: 0.5rem;
-    border-left: 3px solid #8B0000;
-  }
-
-  .feedback-mini-item p {
-    margin: 0 0 0.25rem 0;
-    color: #333;
-  }
-
-  .feedback-mini-date {
-    font-size: 0.75rem;
-    color: #888;
-  }
-
-  .ticket-mini-item {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.5rem;
-    background: #f8f9fa;
-    border-radius: 6px;
-    margin-bottom: 0.5rem;
-  }
-
-  .ticket-mini-number {
-    font-weight: 600;
-    color: #8B0000;
-  }
-
-  .ticket-mini-date {
-    margin-left: auto;
-    font-size: 0.75rem;
-    color: #888;
-  }
-*/
