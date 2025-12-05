@@ -67,29 +67,6 @@ const getStatusIcon = (status) => {
   }
 };
 
-// Get lead status badge class based on status value
-const getLeadStatusBadgeClass = (leadStatus) => {
-  if (!leadStatus) return '';
-  const status = leadStatus.toLowerCase();
-  
-  if (status.includes('mc complete') || status.includes('masterclass complete')) {
-    return 'lead-status-mc-complete';
-  }
-  if (status.includes('lep') || status.includes('started')) {
-    return 'lead-status-lep-started';
-  }
-  if (status.includes('hot')) {
-    return 'lead-status-hot';
-  }
-  if (status.includes('warm')) {
-    return 'lead-status-warm';
-  }
-  if (status.includes('cold')) {
-    return 'lead-status-cold';
-  }
-  return 'lead-status-default';
-};
-
 // ============================================
 // COUNSELLOR QUERY TOOLTIP COMPONENT
 // ============================================
@@ -394,13 +371,6 @@ const TicketDetailModal = ({ isOpen, onClose, ticketId, onTicketUpdate }) => {
               {ticket.user.email && (
                 <div className="user-email">✉️ {ticket.user.email}</div>
               )}
-              {ticket.user.lead_status && (
-                <div className="user-lead-status">
-                  📊 Lead Status: <span className={`lead-status-badge ${getLeadStatusBadgeClass(ticket.user.lead_status)}`}>
-                    {ticket.user.lead_status}
-                  </span>
-                </div>
-              )}
               <div className="ticket-dates">
                 <span>Created: {formatDate(ticket.ticket.created_at)}</span>
                 {ticket.ticket.resolved_at && (
@@ -646,21 +616,7 @@ const UserDetailModal = ({ isOpen, onClose, userId }) => {
                 </div>
               </div>
               <div className="detail-card">
-                <h3>📊 CRM & Activity</h3>
-                <div className="detail-row">
-                  <span className="detail-label">Lead Status:</span>
-                  <span className="detail-value">
-                    {user.user.lead_status ? (
-                      <span className={`lead-status-badge ${getLeadStatusBadgeClass(user.user.lead_status)}`}>
-                        {user.user.lead_status}
-                      </span>
-                    ) : '-'}
-                  </span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">CRM Sync:</span>
-                  <span className="detail-value">{user.user.crm_last_sync ? formatDate(user.user.crm_last_sync) : 'Not synced'}</span>
-                </div>
+                <h3>📊 Activity</h3>
                 <div className="detail-row">
                   <span className="detail-label">First Seen:</span>
                   <span className="detail-value">{formatDate(user.user.first_seen)}</span>
@@ -954,7 +910,6 @@ const StatsCards = ({ users }) => {
   const newUsers = users.filter(u => u.participation_level === 'New to platform').length;
   const enrolled = users.filter(u => u.participation_level === 'Enrolled Participant').length;
   const needsCounsellor = users.filter(u => u.needs_counsellor).length;
-  const withLeadStatus = users.filter(u => u.lead_status).length;
 
   return (
     <div className="stats-grid">
@@ -986,19 +941,12 @@ const StatsCards = ({ users }) => {
           <div className="stat-label">Need Counsellor</div>
         </div>
       </div>
-      <div className="stat-card stat-crm">
-        <div className="stat-icon">🔗</div>
-        <div className="stat-content">
-          <div className="stat-number">{withLeadStatus}</div>
-          <div className="stat-label">CRM Synced</div>
-        </div>
-      </div>
     </div>
   );
 };
 
 // ============================================
-// ACTION BUTTONS COMPONENT (Without Broadcast)
+// ACTION BUTTONS COMPONENT
 // ============================================
 const ActionButtons = ({ activeView, setActiveView }) => {
   return (
@@ -1023,6 +971,13 @@ const ActionButtons = ({ activeView, setActiveView }) => {
       >
         <span className="action-icon">📚</span>
         <span>Course Interests</span>
+      </button>
+      <button 
+        className={`action-btn ${activeView === 'broadcast' ? 'active' : ''}`}
+        onClick={() => setActiveView(activeView === 'broadcast' ? 'leads' : 'broadcast')}
+      >
+        <span className="action-icon">📢</span>
+        <span>Broadcast Status</span>
       </button>
       {activeView !== 'leads' && (
         <button 
@@ -1165,7 +1120,6 @@ const CourseInterestsView = () => {
                     <th>Name</th>
                     <th>Email</th>
                     <th>Phone</th>
-                    <th>Lead Status</th>
                     <th>Click Count</th>
                     <th>First Clicked</th>
                     <th>Last Clicked</th>
@@ -1174,7 +1128,7 @@ const CourseInterestsView = () => {
                 <tbody>
                   {courseUsers[activeTab].length === 0 ? (
                     <tr>
-                      <td colSpan="7" className="no-data">No users interested in this course yet</td>
+                      <td colSpan="6" className="no-data">No users interested in this course yet</td>
                     </tr>
                   ) : (
                     courseUsers[activeTab].map((user, idx) => (
@@ -1196,13 +1150,6 @@ const CourseInterestsView = () => {
                                 💬
                               </a>
                             </>
-                          ) : '-'}
-                        </td>
-                        <td>
-                          {user.lead_status ? (
-                            <span className={`lead-status-badge ${getLeadStatusBadgeClass(user.lead_status)}`}>
-                              {user.lead_status}
-                            </span>
                           ) : '-'}
                         </td>
                         <td className="number-cell">{user.click_count}</td>
@@ -1307,19 +1254,212 @@ const FeedbacksView = () => {
                       </a>
                     </div>
                   )}
-                  {feedback.lead_status && (
-                    <div className="feedback-contact-item">
-                      <span className={`lead-status-badge ${getLeadStatusBadgeClass(feedback.lead_status)}`}>
-                        {feedback.lead_status}
-                      </span>
-                    </div>
-                  )}
                 </div>
                 
                 <div className="feedback-text-container">
                   <span className="feedback-label">Feedback:</span>
                   <p className="feedback-text">{feedback.feedback_text}</p>
                 </div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ============================================
+// BROADCAST STATUS VIEW COMPONENT
+// ============================================
+const BroadcastStatusView = () => {
+  const [stats, setStats] = useState(null);
+  const [failedMessages, setFailedMessages] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  useEffect(() => {
+    fetchBroadcastData();
+  }, []);
+
+  const fetchBroadcastData = async () => {
+    setLoading(true);
+    try {
+      const [statsRes, failedRes] = await Promise.all([
+        fetch(`${API_URL}/api/broadcasts/stats`),
+        fetch(`${API_URL}/api/broadcasts/failed`)
+      ]);
+      
+      const statsData = await statsRes.json();
+      const failedData = await failedRes.json();
+      
+      setStats(statsData);
+      setFailedMessages(failedData.failed_broadcasts || []);
+      setLoading(false);
+    } catch (err) {
+      console.error(err);
+      setLoading(false);
+    }
+  };
+
+  const handleSendViaWhatsApp = (phone, message) => {
+    const cleanPhone = phone.replace(/[^0-9]/g, '');
+    const encodedMessage = encodeURIComponent(message);
+    const url = `https://wa.me/${cleanPhone}?text=${encodedMessage}`;
+    window.open(url, '_blank');
+  };
+
+  const handleCopyMessage = (message) => {
+    navigator.clipboard.writeText(message);
+    alert('Message copied to clipboard!');
+  };
+
+  const handleMarkAsSent = async (broadcastId) => {
+    try {
+      await fetch(`${API_URL}/api/broadcasts/${broadcastId}/mark-resent`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manually_sent_by: 'Dashboard User' })
+      });
+      
+      fetchBroadcastData();
+      alert('Marked as manually sent!');
+    } catch (err) {
+      console.error(err);
+      alert('Failed to update status');
+    }
+  };
+
+  const filteredMessages = failedMessages.filter(msg => {
+    if (!searchTerm) return true;
+    const search = searchTerm.toLowerCase();
+    const name = (msg.recipient_name || '').toLowerCase();
+    const phone = (msg.phone_number || '').toLowerCase();
+    const message = (msg.message_text || '').toLowerCase();
+    
+    return name.includes(search) || phone.includes(search) || message.includes(search);
+  });
+
+  if (loading) {
+    return (
+      <div className="view-container">
+        <div className="loading-container">
+          <div className="spinner"></div>
+          <p>Loading broadcast data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="view-container">
+      <div className="view-header">
+        <h2>📢 Broadcast Status</h2>
+      </div>
+
+      {stats && (
+        <div className="broadcast-stats">
+          <div className="broadcast-stat-card stat-total">
+            <div className="broadcast-stat-icon">📊</div>
+            <div className="broadcast-stat-content">
+              <div className="broadcast-stat-number">{stats.total}</div>
+              <div className="broadcast-stat-label">Total Sent</div>
+            </div>
+          </div>
+          <div className="broadcast-stat-card stat-delivered">
+            <div className="broadcast-stat-icon">✅</div>
+            <div className="broadcast-stat-content">
+              <div className="broadcast-stat-number">{stats.delivered}</div>
+              <div className="broadcast-stat-label">Delivered</div>
+            </div>
+          </div>
+          <div className="broadcast-stat-card stat-failed">
+            <div className="broadcast-stat-icon">❌</div>
+            <div className="broadcast-stat-content">
+              <div className="broadcast-stat-number">{stats.failed}</div>
+              <div className="broadcast-stat-label">Failed</div>
+            </div>
+          </div>
+          <div className="broadcast-stat-card stat-manual">
+            <div className="broadcast-stat-icon">📱</div>
+            <div className="broadcast-stat-content">
+              <div className="broadcast-stat-number">{stats.manually_sent}</div>
+              <div className="broadcast-stat-label">Manually Sent</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="broadcast-filters">
+        <div className="broadcast-search-group">
+          <label>🔍 Search Failed Messages</label>
+          <input
+            type="text"
+            placeholder="Search name, phone, or message..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+        <button className="btn btn-refresh" onClick={fetchBroadcastData}>
+          🔄 Refresh
+        </button>
+      </div>
+
+      <div className="failed-messages-header">
+        <h3>❌ Failed Messages ({filteredMessages.length})</h3>
+      </div>
+
+      <div className="failed-messages-list">
+        {filteredMessages.length === 0 ? (
+          <div className="no-failed-messages">
+            <p>🎉 No failed messages!</p>
+          </div>
+        ) : (
+          filteredMessages.map((msg, idx) => (
+            <div key={idx} className="failed-message-card">
+              <div className="failed-message-header">
+                <div className="failed-message-user">
+                  <span className="failed-message-name">{msg.recipient_name || 'Unknown'}</span>
+                  <span className="failed-message-phone">📱 {msg.phone_number}</span>
+                </div>
+                <div className="failed-message-meta">
+                  <span className="failed-message-date">📅 {formatDate(msg.failed_at || msg.sent_at)}</span>
+                </div>
+              </div>
+
+              <div className="failed-message-body">
+                <div className="failed-message-text">
+                  <span className="failed-message-label">Message:</span>
+                  <p>{msg.message_text}</p>
+                </div>
+
+                {msg.failure_reason && (
+                  <div className="failed-message-reason">
+                    <span className="failed-message-label">⚠️ Failure Reason:</span>
+                    <p>{msg.failure_reason}</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="failed-message-actions">
+                <button 
+                  className="btn btn-whatsapp"
+                  onClick={() => handleSendViaWhatsApp(msg.phone_number, msg.message_text)}
+                >
+                  💬 Send via WhatsApp
+                </button>
+                <button 
+                  className="btn btn-secondary"
+                  onClick={() => handleCopyMessage(msg.message_text)}
+                >
+                  📋 Copy Message
+                </button>
+                <button 
+                  className="btn btn-resolve"
+                  onClick={() => handleMarkAsSent(msg.id)}
+                >
+                  ✅ Mark as Sent
+                </button>
               </div>
             </div>
           ))
@@ -1340,13 +1480,9 @@ function App() {
   
   const [timeFilter, setTimeFilter] = useState('All');
   const [participationFilter, setParticipationFilter] = useState('All');
-  const [leadStatusFilter, setLeadStatusFilter] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
   
   const [userModal, setUserModal] = useState({ isOpen: false, userId: null });
-  
-  // Get unique lead statuses for filter dropdown
-  const [leadStatuses, setLeadStatuses] = useState([]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -1354,13 +1490,6 @@ function App() {
       const res = await fetch(`${API_URL}/api/users`);
       const data = await res.json();
       setUsers(data.users || []);
-      
-      // Extract unique lead statuses
-      const statuses = [...new Set((data.users || [])
-        .map(u => u.lead_status)
-        .filter(s => s))];
-      setLeadStatuses(statuses);
-      
       setError(null);
     } catch (err) {
       setError('Failed to fetch data. Make sure backend is running.');
@@ -1399,22 +1528,12 @@ function App() {
       return false;
     }
     
-    // Lead status filter
-    if (leadStatusFilter !== 'All') {
-      if (leadStatusFilter === 'No Status' && user.lead_status) {
-        return false;
-      } else if (leadStatusFilter !== 'No Status' && user.lead_status !== leadStatusFilter) {
-        return false;
-      }
-    }
-    
     if (searchTerm) {
       const search = searchTerm.toLowerCase();
       const name = (user.name || '').toLowerCase();
       const email = (user.email || '').toLowerCase();
       const phone = (user.phone_number || '').toLowerCase();
-      const leadStatus = (user.lead_status || '').toLowerCase();
-      if (!name.includes(search) && !email.includes(search) && !phone.includes(search) && !leadStatus.includes(search)) {
+      if (!name.includes(search) && !email.includes(search) && !phone.includes(search)) {
         return false;
       }
     }
@@ -1427,13 +1546,12 @@ function App() {
   };
 
   const downloadCSV = () => {
-    const headers = ['Name', 'Email', 'Phone', 'Lead Status', 'Participation', 'Needs Counsellor', 'Counsellor Query', 'Course Interest', 'First Seen', 'Last Active'];
+    const headers = ['Name', 'Email', 'Phone', 'Participation', 'Needs Counsellor', 'Counsellor Query', 'Course Interest', 'First Seen', 'Last Active'];
     const rows = filteredUsers.map(user => {
       return [
         user.name || '-',
         user.email || '-',
         user.phone_number || '-',
-        user.lead_status || '-',
         user.participation_level || '-',
         user.needs_counsellor ? 'Yes' : 'No',
         user.counsellor_query || '-',
@@ -1460,6 +1578,8 @@ function App() {
         return <FeedbacksView />;
       case 'courses':
         return <CourseInterestsView />;
+      case 'broadcast':
+        return <BroadcastStatusView />;
       default:
         return renderLeadsView();
     }
@@ -1504,7 +1624,6 @@ function App() {
                 <th>Name</th>
                 <th>Email</th>
                 <th>Phone</th>
-                <th>Lead Status</th>
                 <th>Participation</th>
                 <th>Need Counsellor</th>
                 <th>Course Interest</th>
@@ -1515,7 +1634,7 @@ function App() {
             <tbody>
               {filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan="9" className="no-data">No leads found</td>
+                  <td colSpan="8" className="no-data">No leads found</td>
                 </tr>
               ) : (
                 filteredUsers.map(user => (
@@ -1544,13 +1663,6 @@ function App() {
                             💬
                           </a>
                         </>
-                      ) : '-'}
-                    </td>
-                    <td>
-                      {user.lead_status ? (
-                        <span className={`lead-status-badge ${getLeadStatusBadgeClass(user.lead_status)}`} title={user.lead_status}>
-                          {user.lead_status}
-                        </span>
                       ) : '-'}
                     </td>
                     <td>
@@ -1627,22 +1739,11 @@ function App() {
             </select>
           </div>
           
-          <div className="filter-group">
-            <label>📊 Lead Status (CRM)</label>
-            <select value={leadStatusFilter} onChange={(e) => setLeadStatusFilter(e.target.value)}>
-              <option value="All">All Status</option>
-              <option value="No Status">No Status</option>
-              {leadStatuses.map((status, idx) => (
-                <option key={idx} value={status}>{status}</option>
-              ))}
-            </select>
-          </div>
-          
           <div className="filter-group search-group">
             <label>🔍 Search</label>
             <input
               type="text"
-              placeholder="Search name, email, phone, lead status..."
+              placeholder="Search name, email, phone..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -1661,7 +1762,7 @@ function App() {
       </main>
 
       <footer className="footer">
-        <p>Last updated: {new Date().toLocaleString('en-IN')} | Iron Lady WATI Analytics v9.0.0 - CRM Lead Status Integration</p>
+        <p>Last updated: {new Date().toLocaleString('en-IN')} | Iron Lady WATI Analytics v5.2.0 - Reply-to-Message Feature</p>
       </footer>
 
       <UserDetailModal
