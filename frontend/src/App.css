@@ -1,6 +1,6 @@
 /* ============================================
-   Iron Lady React Dashboard - Styles v9.0.0
-   With Ticket System, Conversation View, Reply-to-Message & CRM Lead Status
+   Iron Lady React Dashboard - Styles v5.2.0
+   With Ticket System, Conversation View & Reply-to-Message Feature
    ============================================ */
 
 /* Reset & Base */
@@ -210,7 +210,6 @@ body {
 .stat-new .stat-icon { background: linear-gradient(135deg, #11998e, #38ef7d); }
 .stat-enrolled .stat-icon { background: linear-gradient(135deg, #ee0979, #ff6a00); }
 .stat-counsellor .stat-icon { background: linear-gradient(135deg, #f7971e, #ffd200); }
-.stat-crm .stat-icon { background: linear-gradient(135deg, #4facfe, #00f2fe); }
 
 .stat-number {
   font-size: 2rem;
@@ -472,51 +471,6 @@ body {
 .badge-warning {
   background: #fff3cd;
   color: #856404;
-}
-
-/* ============================================
-   Lead Status Badges (CRM)
-   ============================================ */
-.lead-status-badge {
-  padding: 0.35rem 0.7rem;
-  border-radius: 15px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  display: inline-block;
-  max-width: 150px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.lead-status-mc-complete {
-  background: linear-gradient(135deg, #d4edda, #c3e6cb);
-  color: #155724;
-}
-
-.lead-status-lep-started {
-  background: linear-gradient(135deg, #cce5ff, #b8daff);
-  color: #004085;
-}
-
-.lead-status-hot {
-  background: linear-gradient(135deg, #f8d7da, #f5c6cb);
-  color: #721c24;
-}
-
-.lead-status-warm {
-  background: linear-gradient(135deg, #fff3cd, #ffeeba);
-  color: #856404;
-}
-
-.lead-status-cold {
-  background: linear-gradient(135deg, #e2e3e5, #d6d8db);
-  color: #383d41;
-}
-
-.lead-status-default {
-  background: linear-gradient(135deg, #e0cffc, #d0bfff);
-  color: #5a3d8a;
 }
 
 /* ============================================
@@ -1164,12 +1118,6 @@ body {
   font-size: 0.9rem;
   color: #666;
   margin-top: 0.5rem;
-}
-
-.user-lead-status {
-  font-size: 0.9rem;
-  color: #666;
-  margin-top: 0.25rem;
 }
 
 .ticket-dates {
@@ -1996,6 +1944,241 @@ body {
 }
 
 /* ============================================
+   Broadcast Status View
+   ============================================ */
+.broadcast-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.5rem;
+  padding: 2rem;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+}
+
+.broadcast-stat-card {
+  background: white;
+  border-radius: 16px;
+  padding: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.broadcast-stat-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12);
+}
+
+.broadcast-stat-icon {
+  font-size: 2.5rem;
+  width: 60px;
+  height: 60px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.broadcast-stat-card.stat-total .broadcast-stat-icon { 
+  background: linear-gradient(135deg, #667eea, #764ba2); 
+}
+.broadcast-stat-card.stat-delivered .broadcast-stat-icon { 
+  background: linear-gradient(135deg, #11998e, #38ef7d); 
+}
+.broadcast-stat-card.stat-failed .broadcast-stat-icon { 
+  background: linear-gradient(135deg, #ee0979, #ff6a00); 
+}
+.broadcast-stat-card.stat-manual .broadcast-stat-icon { 
+  background: linear-gradient(135deg, #4facfe, #00f2fe); 
+}
+
+.broadcast-stat-number {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #333;
+}
+
+.broadcast-stat-label {
+  font-size: 0.9rem;
+  color: #777;
+}
+
+.broadcast-filters {
+  display: flex;
+  gap: 1.5rem;
+  padding: 1.5rem 2rem;
+  background: white;
+  border-bottom: 1px solid #e0e0e0;
+  align-items: flex-end;
+}
+
+.broadcast-search-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.broadcast-search-group label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #555;
+}
+
+.broadcast-search-group input {
+  padding: 0.75rem 1rem;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  transition: all 0.3s ease;
+}
+
+.broadcast-search-group input:focus {
+  outline: none;
+  border-color: #8B0000;
+  box-shadow: 0 0 0 3px rgba(139, 0, 0, 0.1);
+}
+
+.failed-messages-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem 2rem;
+  background: linear-gradient(135deg, #8B0000 0%, #c41e3a 100%);
+  color: white;
+}
+
+.failed-messages-header h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.failed-messages-list {
+  padding: 1.5rem 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.no-failed-messages {
+  text-align: center;
+  padding: 4rem 2rem;
+  background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+  border-radius: 12px;
+  color: #155724;
+}
+
+.no-failed-messages p {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.failed-message-card {
+  background: white;
+  border: 2px solid #ffebee;
+  border-left: 6px solid #ee0979;
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+}
+
+.failed-message-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12);
+  border-color: #ffcdd2;
+}
+
+.failed-message-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.25rem 1.5rem;
+  background: linear-gradient(135deg, #fff5f5 0%, #ffebee 100%);
+  border-bottom: 1px solid #ffcdd2;
+}
+
+.failed-message-user {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.failed-message-name {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #8B0000;
+}
+
+.failed-message-phone {
+  font-size: 0.9rem;
+  color: #666;
+  font-weight: 500;
+}
+
+.failed-message-meta {
+  text-align: right;
+}
+
+.failed-message-date {
+  font-size: 0.85rem;
+  color: #888;
+  font-weight: 500;
+}
+
+.failed-message-body {
+  padding: 1.25rem 1.5rem;
+}
+
+.failed-message-text {
+  margin-bottom: 1rem;
+}
+
+.failed-message-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #8B0000;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 0.5rem;
+}
+
+.failed-message-text p,
+.failed-message-reason p {
+  background: linear-gradient(135deg, #f8f9fa 0%, #f0f0f0 100%);
+  border-radius: 8px;
+  padding: 1rem;
+  margin: 0;
+  color: #444;
+  line-height: 1.6;
+  border-left: 3px solid #8B0000;
+}
+
+.failed-message-reason {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px dashed #e0e0e0;
+}
+
+.failed-message-reason p {
+  border-left-color: #f7971e;
+  color: #856404;
+  background: linear-gradient(135deg, #fff3cd 0%, #ffeeba 100%);
+}
+
+.failed-message-actions {
+  padding: 1rem 1.5rem;
+  background: #fafafa;
+  border-top: 1px solid #e0e0e0;
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+/* ============================================
    Loading & Error States
    ============================================ */
 .loading-container,
@@ -2106,7 +2289,7 @@ body {
   }
   
   .leads-table {
-    min-width: 1000px;
+    min-width: 900px;
   }
 
   .ticket-stats-bar {
@@ -2165,6 +2348,44 @@ body {
     flex-direction: column;
     align-items: flex-start;
     gap: 0.25rem;
+  }
+
+  .broadcast-stats {
+    grid-template-columns: repeat(2, 1fr);
+    padding: 1rem;
+  }
+
+  .broadcast-filters {
+    flex-direction: column;
+    padding: 1rem;
+  }
+
+  .failed-messages-header {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: flex-start;
+  }
+
+  .failed-messages-list {
+    padding: 1rem;
+  }
+
+  .failed-message-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+
+  .failed-message-meta {
+    text-align: left;
+  }
+
+  .failed-message-actions {
+    flex-direction: column;
+  }
+
+  .failed-message-actions .btn {
+    width: 100%;
   }
 
   /* Mobile tooltip positioning */
