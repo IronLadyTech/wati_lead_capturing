@@ -77,7 +77,9 @@ const SimpleBarChart = memo(({ data }) => {
       </div>
     </div>
   );
-};
+});
+
+SimpleBarChart.displayName = 'SimpleBarChart';
 
 // ============================================
 // DEBOUNCE HOOK
