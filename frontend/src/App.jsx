@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // API Base URL
 const API_URL = "https://wati-leads-dashboard.iamironlady.com";
@@ -28,6 +28,25 @@ const SimpleBarChart = ({ data }) => {
       </div>
     </div>
   );
+};
+
+// ============================================
+// DEBOUNCE HOOK
+// ============================================
+const useDebounce = (value, delay) => {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [value, delay]);
+
+  return debouncedValue;
 };
 
 // ============================================
@@ -702,11 +721,17 @@ const TicketsView = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTicketId, setSelectedTicketId] = useState(null);
+  const [skip, setSkip] = useState(0);
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const limit = 50;
+  
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
   const fetchTickets = useCallback(async () => {
     setLoading(true);
     try {
-      let url = `${API_URL}/api/tickets?limit=500`;
+      let url = `${API_URL}/api/tickets?limit=${limit}&skip=${skip}`;
       
       if (statusFilter !== 'all') {
         url += `&status=${statusFilter}`;
@@ -721,11 +746,17 @@ const TicketsView = () => {
       const data = await res.json();
       setTickets(data.tickets || []);
       setStats(data.stats || {});
+      setTotal(data.total || 0);
+      setHasMore(data.has_more || false);
       setLoading(false);
     } catch (err) {
       console.error(err);
       setLoading(false);
     }
+  }, [activeTab, statusFilter, skip, limit]);
+
+  useEffect(() => {
+    setSkip(0); // Reset to first page when filters change
   }, [activeTab, statusFilter]);
 
   useEffect(() => {
@@ -733,8 +764,8 @@ const TicketsView = () => {
   }, [fetchTickets]);
 
   const filteredTickets = tickets.filter(t => {
-    if (!searchTerm) return true;
-    const search = searchTerm.toLowerCase();
+    if (!debouncedSearchTerm) return true;
+    const search = debouncedSearchTerm.toLowerCase();
     return (
       (t.ticket_number || '').toLowerCase().includes(search) ||
       (t.user_name || '').toLowerCase().includes(search) ||
@@ -818,12 +849,12 @@ const TicketsView = () => {
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
-        <button className="btn btn-refresh" onClick={fetchTickets}>
+        <button className="btn btn-refresh" onClick={() => { setSkip(0); fetchTickets(); }}>
           🔄 Refresh
         </button>
       </div>
 
-      {loading ? (
+      {loading && skip === 0 ? (
         <div className="loading-container">
           <div className="spinner"></div>
           <p>Loading tickets...</p>
@@ -889,6 +920,29 @@ const TicketsView = () => {
               </div>
             ))
           )}
+        </div>
+      )}
+
+      {/* Pagination Controls */}
+      {!loading && tickets.length > 0 && (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px', marginTop: '20px', padding: '20px' }}>
+          <button 
+            className="btn btn-secondary" 
+            onClick={() => setSkip(Math.max(0, skip - limit))}
+            disabled={skip === 0}
+          >
+            ← Previous
+          </button>
+          <span style={{ padding: '0 15px' }}>
+            Showing {skip + 1} - {Math.min(skip + limit, total)} of {total}
+          </span>
+          <button 
+            className="btn btn-secondary" 
+            onClick={() => setSkip(skip + limit)}
+            disabled={!hasMore}
+          >
+            Next →
+          </button>
         </div>
       )}
 
@@ -1481,65 +1535,79 @@ function App() {
   const [timeFilter, setTimeFilter] = useState('All');
   const [participationFilter, setParticipationFilter] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
+  const [skip, setSkip] = useState(0);
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const limit = 50;
+  
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
   
   const [userModal, setUserModal] = useState({ isOpen: false, userId: null });
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/users`);
+      const res = await fetch(`${API_URL}/api/users?limit=${limit}&skip=${skip}`);
       const data = await res.json();
       setUsers(data.users || []);
+      setTotal(data.total || 0);
+      setHasMore(data.has_more || false);
       setError(null);
     } catch (err) {
       setError('Failed to fetch data. Make sure backend is running.');
       console.error(err);
     }
     setLoading(false);
-  }, []);
+  }, [skip, limit]);
+
+  useEffect(() => {
+    setSkip(0); // Reset to first page when filters change
+  }, [timeFilter, participationFilter]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  const filteredUsers = users.filter(user => {
-    if (timeFilter !== 'All') {
-      const userDate = new Date(user.first_seen);
-      const now = new Date();
-      let daysAgo = 0;
-      
-      switch (timeFilter) {
-        case 'Today': daysAgo = 1; break;
-        case 'Last 2 Days': daysAgo = 2; break;
-        case 'Last 3 Days': daysAgo = 3; break;
-        case 'Last Week': daysAgo = 7; break;
-        case 'Last 2 Weeks': daysAgo = 14; break;
-        case 'Last Month': daysAgo = 30; break;
-        default: daysAgo = 0;
+  const filteredUsers = useMemo(() => {
+    return users.filter(user => {
+      if (timeFilter !== 'All') {
+        const userDate = new Date(user.first_seen);
+        const now = new Date();
+        let daysAgo = 0;
+        
+        switch (timeFilter) {
+          case 'Today': daysAgo = 1; break;
+          case 'Last 2 Days': daysAgo = 2; break;
+          case 'Last 3 Days': daysAgo = 3; break;
+          case 'Last Week': daysAgo = 7; break;
+          case 'Last 2 Weeks': daysAgo = 14; break;
+          case 'Last Month': daysAgo = 30; break;
+          default: daysAgo = 0;
+        }
+        
+        if (daysAgo > 0) {
+          const cutoff = new Date(now.getTime() - daysAgo * 24 * 60 * 60 * 1000);
+          if (userDate < cutoff) return false;
+        }
       }
       
-      if (daysAgo > 0) {
-        const cutoff = new Date(now.getTime() - daysAgo * 24 * 60 * 60 * 1000);
-        if (userDate < cutoff) return false;
-      }
-    }
-    
-    if (participationFilter !== 'All' && user.participation_level !== participationFilter) {
-      return false;
-    }
-    
-    if (searchTerm) {
-      const search = searchTerm.toLowerCase();
-      const name = (user.name || '').toLowerCase();
-      const email = (user.email || '').toLowerCase();
-      const phone = (user.phone_number || '').toLowerCase();
-      if (!name.includes(search) && !email.includes(search) && !phone.includes(search)) {
+      if (participationFilter !== 'All' && user.participation_level !== participationFilter) {
         return false;
       }
-    }
-    
-    return true;
-  });
+      
+      if (debouncedSearchTerm) {
+        const search = debouncedSearchTerm.toLowerCase();
+        const name = (user.name || '').toLowerCase();
+        const email = (user.email || '').toLowerCase();
+        const phone = (user.phone_number || '').toLowerCase();
+        if (!name.includes(search) && !email.includes(search) && !phone.includes(search)) {
+          return false;
+        }
+      }
+      
+      return true;
+    });
+  }, [users, timeFilter, participationFilter, debouncedSearchTerm]);
 
   const handleUserClick = (userId) => {
     setUserModal({ isOpen: true, userId });
@@ -1700,6 +1768,29 @@ function App() {
             </tbody>
           </table>
         </div>
+        
+        {/* Pagination Controls */}
+        {!loading && users.length > 0 && (
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px', marginTop: '20px', padding: '20px' }}>
+            <button 
+              className="btn btn-secondary" 
+              onClick={() => setSkip(Math.max(0, skip - limit))}
+              disabled={skip === 0}
+            >
+              ← Previous
+            </button>
+            <span style={{ padding: '0 15px' }}>
+              Showing {skip + 1} - {Math.min(skip + limit, total)} of {total}
+            </span>
+            <button 
+              className="btn btn-secondary" 
+              onClick={() => setSkip(skip + limit)}
+              disabled={!hasMore}
+            >
+              Next →
+            </button>
+          </div>
+        )}
       </>
     );
   };
@@ -1749,7 +1840,7 @@ function App() {
             />
           </div>
           
-          <button className="btn btn-refresh" onClick={fetchData}>
+          <button className="btn btn-refresh" onClick={() => { setSkip(0); fetchData(); }}>
             🔄 Refresh
           </button>
         </div>
