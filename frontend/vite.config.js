@@ -26,8 +26,7 @@ export default defineConfig({
       output: {
         // Code splitting for better caching
         manualChunks: {
-          'react-vendor': ['react', 'react-dom'],
-          'react-router': ['react-router-dom']
+          'react-vendor': ['react', 'react-dom']
         }
       }
     },
