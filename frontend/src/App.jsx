@@ -1,12 +1,61 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense, memo } from 'react';
 
 // API Base URL
 const API_URL = "https://wati-leads-dashboard.iamironlady.com";
 
 // ============================================
+// API RESPONSE CACHE
+// ============================================
+const apiCache = new Map();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+const getCachedResponse = (url) => {
+  const cached = apiCache.get(url);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached.data;
+  }
+  apiCache.delete(url);
+  return null;
+};
+
+const setCachedResponse = (url, data) => {
+  apiCache.set(url, { data, timestamp: Date.now() });
+  // Clean old cache entries if cache gets too large
+  if (apiCache.size > 100) {
+    const now = Date.now();
+    for (const [key, value] of apiCache.entries()) {
+      if (now - value.timestamp > CACHE_TTL) {
+        apiCache.delete(key);
+      }
+    }
+  }
+};
+
+const fetchWithCache = async (url, options = {}) => {
+  // Don't cache POST/PATCH/DELETE requests
+  if (options.method && options.method !== 'GET') {
+    return fetch(url, options);
+  }
+  
+  const cached = getCachedResponse(url);
+  if (cached) {
+    return { ok: true, json: async () => cached, cached: true };
+  }
+  
+  const response = await fetch(url, options);
+  if (response.ok) {
+    const data = await response.json();
+    setCachedResponse(url, data);
+    return { ...response, json: async () => data, cached: false };
+  }
+  
+  return response;
+};
+
+// ============================================
 // SIMPLE BAR CHART COMPONENT
 // ============================================
-const SimpleBarChart = ({ data }) => {
+const SimpleBarChart = memo(({ data }) => {
   const maxValue = Math.max(...data.map(d => d.clicks), 1);
   
   return (
@@ -742,7 +791,7 @@ const TicketsView = () => {
         url += '&category=concern';
       }
       
-      const res = await fetch(url);
+      const res = await fetchWithCache(url);
       const data = await res.json();
       setTickets(data.tickets || []);
       setStats(data.stats || {});
@@ -959,7 +1008,7 @@ const TicketsView = () => {
 // ============================================
 // STATS CARDS COMPONENT
 // ============================================
-const StatsCards = ({ users }) => {
+const StatsCards = memo(({ users }) => {
   const totalLeads = users.length;
   const newUsers = users.filter(u => u.participation_level === 'New to platform').length;
   const enrolled = users.filter(u => u.participation_level === 'Enrolled Participant').length;
@@ -997,7 +1046,9 @@ const StatsCards = ({ users }) => {
       </div>
     </div>
   );
-};
+});
+
+StatsCards.displayName = 'StatsCards';
 
 // ============================================
 // ACTION BUTTONS COMPONENT
@@ -1062,7 +1113,7 @@ const CourseInterestsView = () => {
   const fetchCourseData = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/course-interests`);
+      const res = await fetchWithCache(`${API_URL}/api/course-interests`);
       const data = await res.json();
       setCourseData(data.course_interests || []);
       setLoading(false);
@@ -1075,7 +1126,7 @@ const CourseInterestsView = () => {
   const fetchCourseUsers = async (courseName) => {
     if (courseUsers[courseName]) return;
     try {
-      const res = await fetch(`${API_URL}/api/course-interests/${courseName}`);
+      const res = await fetchWithCache(`${API_URL}/api/course-interests/${courseName}`);
       const data = await res.json();
       setCourseUsers(prev => ({ ...prev, [courseName]: data.users || [] }));
     } catch (err) {
@@ -1238,7 +1289,7 @@ const FeedbacksView = () => {
   const fetchFeedbacks = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/feedbacks`);
+      const res = await fetchWithCache(`${API_URL}/api/feedbacks`);
       const data = await res.json();
       setFeedbacks(data.feedbacks || []);
       setLoading(false);
@@ -1340,8 +1391,8 @@ const BroadcastStatusView = () => {
     setLoading(true);
     try {
       const [statsRes, failedRes] = await Promise.all([
-        fetch(`${API_URL}/api/broadcasts/stats`),
-        fetch(`${API_URL}/api/broadcasts/failed`)
+        fetchWithCache(`${API_URL}/api/broadcasts/stats`),
+        fetchWithCache(`${API_URL}/api/broadcasts/failed`)
       ]);
       
       const statsData = await statsRes.json();
