@@ -2260,13 +2260,15 @@ async def send_reply(ticket_id: int, reply: TicketReplyRequest, db: Session = De
     
     phone = ticket.user.phone_number
     
-    last_user_msg = db.query(TicketMessage).filter(
+    # Get the FIRST incoming message (the original query/concern that created the ticket)
+    # This will be quoted in WhatsApp-style reply so user knows which query/concern is being answered
+    first_user_msg = db.query(TicketMessage).filter(
         TicketMessage.ticket_id == ticket_id,
         TicketMessage.direction == "incoming",
         TicketMessage.wati_message_id != None
-    ).order_by(TicketMessage.created_at.desc()).first()
+    ).order_by(TicketMessage.created_at.asc()).first()  # Get FIRST message (ascending order)
     
-    reply_to_message_id = last_user_msg.wati_message_id if last_user_msg else None
+    reply_to_message_id = first_user_msg.wati_message_id if first_user_msg else None
     
     full_msg = f"{reply.message}\n\n───────────────────\nAre you satisfied with this response?"
     buttons = [{"text": "Yes, Resolved"}, {"text": "Need More Help"}]
